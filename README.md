@@ -1,9 +1,9 @@
 # NeoGenealogy
 
-Herramienta local de análisis genealógico. Fase 2.0 — Persistence Foundation (SQLite).
+Herramienta local de análisis genealógico. Fase 2.1 — REST API Foundation (Axum).
 
 ```
-GEDCOM → Parser → Model → Analysis → Research Engine → Storage(SQLite) → CLI
+GEDCOM → Parser → Model → Analysis → Research Engine → Storage(SQLite) → API(Axum) → CLI/HTTP
 ```
 
 ## Uso (sin DB — análisis directo)
@@ -42,9 +42,24 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
 - `storage` — SQLite, migraciones, repositories, `analysis_runs` snapshot
-- `cli` — interfaz actual (futura API Axum usará `storage`)
+- `api` — Axum REST `/api/v1` (read-only, expone storage)
+- `cli` — `analyze / import / stats / report / serve`
 
-Véase `docs/STORAGE.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+Véase `docs/API.md`, `docs/STORAGE.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+
+## API REST
+
+```bash
+cargo run -p neogenealogy -- import test-data/complex.ged --db /tmp/neogenealogy.db
+cargo run -p neogenealogy -- serve --db /tmp/neogenealogy.db --host 127.0.0.1 --port 3000
+curl http://127.0.0.1:3000/health
+curl http://127.0.0.1:3000/api/v1/trees
+curl http://127.0.0.1:3000/api/v1/trees/1/persons?limit=5
+curl 'http://127.0.0.1:3000/api/v1/trees/1/research-opportunities/top'
+curl http://127.0.0.1:3000/api/v1/openapi.json
+```
+
+Env: `NEOGENEALOGY_HOST`, `NEOGENEALOGY_PORT`, `NEOGENEALOGY_DATABASE_URL`, `NEOGENEALOGY_CORS_ORIGIN`.
 
 ## Benchmark
 

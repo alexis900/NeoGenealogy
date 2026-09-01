@@ -53,6 +53,14 @@ enum Command {
         #[arg(long)]
         db: Option<PathBuf>,
     },
+    Serve {
+        #[arg(long, env = "NEOGENEALOGY_DATABASE_URL")]
+        db: Option<PathBuf>,
+        #[arg(long, env = "NEOGENEALOGY_HOST", default_value = "127.0.0.1")]
+        host: String,
+        #[arg(long, env = "NEOGENEALOGY_PORT", default_value = "3000")]
+        port: u16,
+    },
 }
 
 type TreeResult = (
@@ -575,6 +583,34 @@ async fn main() -> Result<()> {
             } else {
                 return Err(anyhow!("report requires either FILE or --db"));
             }
+        }
+        Command::Serve { db, host, port } => {
+            let db_path = db.unwrap_or_else(|| PathBuf::from("neogenealogy.db"));
+            // Support DATABASE_URL env as sqlite url
+            let db_path = if let Ok(url) = std::env::var("NEOGENEALOGY_DATABASE_URL") {
+                // url may be sqlite://...
+                if url.starts_with("sqlite://") {
+                    PathBuf::from(url.trim_start_matches("sqlite://"))
+                } else {
+                    db_path
+                }
+            } else {
+                db_path
+            };
+            tracing_subscriber::fmt()
+                .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+                .init();
+            let pool = establish_pool_from_path(&db_path).await?;
+            run_migrations(&pool).await?;
+            let storage = Storage::new(pool);
+            let state = neogenealogy_api::state::AppState::new(storage);
+            let app = neogenealogy_api::create_router(state);
+            let addr = format!("{host}:{port}");
+            println!("NeoGenealogy API");
+            println!("Listening on {addr}");
+            println!("Database: {:?}", db_path);
+            let listener = tokio::net::TcpListener::bind(&addr).await?;
+            axum::serve(listener, app).await?;
         }
     }
     Ok(())

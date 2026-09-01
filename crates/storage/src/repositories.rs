@@ -242,4 +242,143 @@ impl Storage {
                 .await?;
         Ok((persons, families, events, sources, findings, opps))
     }
+
+    pub async fn count_trees(&self) -> Result<i64, StorageError> {
+        let cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM trees")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(cnt)
+    }
+
+    pub async fn count_persons(&self, tree_id: i64) -> Result<i64, StorageError> {
+        let cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM persons WHERE tree_id=?1")
+            .bind(tree_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(cnt)
+    }
+
+    pub async fn count_families(&self, tree_id: i64) -> Result<i64, StorageError> {
+        let cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM families WHERE tree_id=?1")
+            .bind(tree_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(cnt)
+    }
+
+    pub async fn list_findings_filtered(
+        &self,
+        tree_id: i64,
+        severity: Option<&str>,
+        finding_type: Option<&str>,
+        person_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<FindingRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM findings WHERE tree_id = ?".to_string();
+        let mut count_sql = "SELECT COUNT(*) FROM findings WHERE tree_id = ?".to_string();
+        if severity.is_some() {
+            sql.push_str(" AND severity = ?");
+            count_sql.push_str(" AND severity = ?");
+        }
+        if finding_type.is_some() {
+            sql.push_str(" AND finding_type = ?");
+            count_sql.push_str(" AND finding_type = ?");
+        }
+        if person_id.is_some() {
+            sql.push_str(" AND person_id = ?");
+            count_sql.push_str(" AND person_id = ?");
+        }
+        sql.push_str(" ORDER BY id LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, FindingRow>(&sql).bind(tree_id);
+        if let Some(sev) = severity {
+            cq = cq.bind(sev.to_lowercase());
+            q = q.bind(sev.to_lowercase());
+        }
+        if let Some(t) = finding_type {
+            cq = cq.bind(t);
+            q = q.bind(t);
+        }
+        if let Some(pid) = person_id {
+            cq = cq.bind(pid);
+            q = q.bind(pid);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_opportunities_filtered(
+        &self,
+        tree_id: i64,
+        priority: Option<&str>,
+        min_score: Option<i64>,
+        sort: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchOpportunityRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_opportunities WHERE tree_id = ?".to_string();
+        let mut count_sql =
+            "SELECT COUNT(*) FROM research_opportunities WHERE tree_id = ?".to_string();
+        if priority.is_some() {
+            sql.push_str(" AND priority = ?");
+            count_sql.push_str(" AND priority = ?");
+        }
+        if min_score.is_some() {
+            sql.push_str(" AND score >= ?");
+            count_sql.push_str(" AND score >= ?");
+        }
+        let order = match sort.map(|s| s.to_lowercase()).as_deref() {
+            Some("priority") => " ORDER BY CASE priority WHEN 'critical' THEN 5 WHEN 'high' THEN 4 WHEN 'medium' THEN 3 WHEN 'warning' THEN 2 WHEN 'info' THEN 1 ELSE 0 END DESC",
+            Some("confidence") => " ORDER BY confidence DESC",
+            _ => " ORDER BY score DESC",
+        };
+        sql.push_str(order);
+        sql.push_str(" LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchOpportunityRow>(&sql).bind(tree_id);
+        if let Some(p) = priority {
+            cq = cq.bind(p.to_lowercase());
+            q = q.bind(p.to_lowercase());
+        }
+        if let Some(ms) = min_score {
+            cq = cq.bind(ms);
+            q = q.bind(ms);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn get_family_members(
+        &self,
+        family_ids: &[i64],
+    ) -> Result<Vec<FamilyMemberRow>, StorageError> {
+        if family_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let placeholders = family_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let query = format!("SELECT * FROM family_members WHERE family_id IN ({placeholders})");
+        let mut q = sqlx::query_as::<_, FamilyMemberRow>(&query);
+        for id in family_ids {
+            q = q.bind(id);
+        }
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok(rows)
+    }
+
+    pub async fn get_family_members_for_family(
+        &self,
+        family_id: i64,
+    ) -> Result<Vec<FamilyMemberRow>, StorageError> {
+        let rows =
+            sqlx::query_as::<_, FamilyMemberRow>("SELECT * FROM family_members WHERE family_id=?1")
+                .bind(family_id)
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(rows)
+    }
 }

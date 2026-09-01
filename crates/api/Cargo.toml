@@ -1,0 +1,25 @@
+[package]
+name = "neogenealogy-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neogenealogy-core = { path = "../core" }
+neogenealogy-storage = { path = "../storage" }
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tower-http.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+sqlx.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
+axum-test.workspace = true
+tempfile.workspace = true
