@@ -98,6 +98,12 @@ pub fn parse_date(raw: &str) -> DateValue {
         }),
     }
 }
+
+const KNOWN_EVENT_TAGS: &[&str] = &[
+    "BIRT", "DEAT", "BAPM", "CHR", "BURI", "MARR", "DIV", "RESI", "OCCU", "EDUC", "RETI", "EVEN",
+    "BARM", "BASM", "BLES", "ADOP", "CENS", "GRAD", "EMIG", "IMMI", "NATU", "PROB", "WILL",
+];
+
 impl GedcomParser for LegacyGedcomParser {
     fn parse(&self, input: &str) -> Result<GenealogyTree, GedcomError> {
         let ls = lines(input)?;
@@ -111,7 +117,6 @@ impl GedcomParser for LegacyGedcomParser {
                     id: t.persons.len() + 1,
                     ..Default::default()
                 };
-                let start = i;
                 i += 1;
                 while i < ls.len() && ls[i].level > 0 {
                     let x = &ls[i];
@@ -134,32 +139,120 @@ impl GedcomParser for LegacyGedcomParser {
                         "OCCU" => p.occupation = Some(x.value.clone()),
                         "FAMS" => p.family_spouse.push(x.value.clone()),
                         "FAMC" => p.family_child = Some(x.value.clone()),
-                        "SOUR" => p.sources.push(x.value.clone()),
-                        "BIRT" => {
-                            if i + 1 < ls.len() && ls[i + 1].tag == "DATE" {
-                                i += 1;
-                                p.birth_date = Some(parse_date(&ls[i].value));
-                            }
-                            if i + 1 < ls.len() && ls[i + 1].tag == "PLAC" {
-                                i += 1;
-                                p.birth_place = Some(ls[i].value.clone());
+                        "SOUR" => {
+                            p.sources.push(x.value.clone());
+                            // capture citation sub-tags (PAGE, DATA, etc.) as raw already
+                            // look ahead for PAGE/DATA at level+1
+                            let mut j = i + 1;
+                            while j < ls.len() && ls[j].level > x.level {
+                                p.raw.push(RawTag {
+                                    level: ls[j].level,
+                                    tag: ls[j].tag.clone(),
+                                    value: ls[j].value.clone(),
+                                });
+                                j += 1;
                             }
                         }
+                        "BIRT" => {
+                            let event_level = x.level;
+                            let mut j = i + 1;
+                            while j < ls.len() && ls[j].level > event_level {
+                                let sub = &ls[j];
+                                p.raw.push(RawTag {
+                                    level: sub.level,
+                                    tag: sub.tag.clone(),
+                                    value: sub.value.clone(),
+                                });
+                                match sub.tag.as_str() {
+                                    "DATE" => p.birth_date = Some(parse_date(&sub.value)),
+                                    "PLAC" => p.birth_place = Some(sub.value.clone()),
+                                    "SOUR" => p.sources.push(sub.value.clone()),
+                                    _ => {}
+                                }
+                                j += 1;
+                            }
+                            // events for birth
+                            let ev = Event {
+                                id: t.events.len() + 1,
+                                person_id: Some(p.gedcom_id.clone()),
+                                event_type: "BIRT".into(),
+                                date: p.birth_date.clone(),
+                                place: p.birth_place.clone(),
+                                ..Default::default()
+                            };
+                            // only push if had date or place; still useful for coverage?
+                            if p.birth_date.is_some() || p.birth_place.is_some() {
+                                t.events.push(ev);
+                            }
+                            i = j - 1;
+                        }
                         "DEAT" => {
-                            if i + 1 < ls.len() && ls[i + 1].tag == "DATE" {
-                                i += 1;
-                                p.death_date = Some(parse_date(&ls[i].value));
+                            let event_level = x.level;
+                            let mut j = i + 1;
+                            while j < ls.len() && ls[j].level > event_level {
+                                let sub = &ls[j];
+                                p.raw.push(RawTag {
+                                    level: sub.level,
+                                    tag: sub.tag.clone(),
+                                    value: sub.value.clone(),
+                                });
+                                match sub.tag.as_str() {
+                                    "DATE" => p.death_date = Some(parse_date(&sub.value)),
+                                    "PLAC" => p.death_place = Some(sub.value.clone()),
+                                    "SOUR" => p.sources.push(sub.value.clone()),
+                                    _ => {}
+                                }
+                                j += 1;
                             }
-                            if i + 1 < ls.len() && ls[i + 1].tag == "PLAC" {
-                                i += 1;
-                                p.death_place = Some(ls[i].value.clone());
+                            let ev = Event {
+                                id: t.events.len() + 1,
+                                person_id: Some(p.gedcom_id.clone()),
+                                event_type: "DEAT".into(),
+                                date: p.death_date.clone(),
+                                place: p.death_place.clone(),
+                                ..Default::default()
+                            };
+                            if p.death_date.is_some() || p.death_place.is_some() {
+                                t.events.push(ev);
                             }
+                            i = j - 1;
+                        }
+                        _ if KNOWN_EVENT_TAGS.contains(&x.tag.as_str()) => {
+                            // generic event handling
+                            let event_level = x.level;
+                            let mut date: Option<DateValue> = None;
+                            let mut place: Option<String> = None;
+                            let mut j = i + 1;
+                            while j < ls.len() && ls[j].level > event_level {
+                                let sub = &ls[j];
+                                p.raw.push(RawTag {
+                                    level: sub.level,
+                                    tag: sub.tag.clone(),
+                                    value: sub.value.clone(),
+                                });
+                                match sub.tag.as_str() {
+                                    "DATE" => date = Some(parse_date(&sub.value)),
+                                    "PLAC" => place = Some(sub.value.clone()),
+                                    "SOUR" => p.sources.push(sub.value.clone()),
+                                    _ => {}
+                                }
+                                j += 1;
+                            }
+                            let ev = Event {
+                                id: t.events.len() + 1,
+                                person_id: Some(p.gedcom_id.clone()),
+                                event_type: x.tag.clone(),
+                                date,
+                                place,
+                                ..Default::default()
+                            };
+                            t.events.push(ev);
+                            i = j - 1;
                         }
                         _ => {}
                     }
                     i += 1;
                 }
-                let _ = start;
                 t.persons.push(p);
                 continue;
             }
@@ -183,14 +276,36 @@ impl GedcomParser for LegacyGedcomParser {
                         "CHIL" => f.children.push(x.value.clone()),
                         "SOUR" => f.sources.push(x.value.clone()),
                         "MARR" => {
-                            if i + 1 < ls.len() && ls[i + 1].tag == "DATE" {
-                                i += 1;
-                                f.marriage_date = Some(parse_date(&ls[i].value));
+                            let lvl = x.level;
+                            let mut j = i + 1;
+                            while j < ls.len() && ls[j].level > lvl {
+                                let sub = &ls[j];
+                                f.raw.push(RawTag {
+                                    level: sub.level,
+                                    tag: sub.tag.clone(),
+                                    value: sub.value.clone(),
+                                });
+                                match sub.tag.as_str() {
+                                    "DATE" => f.marriage_date = Some(parse_date(&sub.value)),
+                                    "PLAC" => f.marriage_place = Some(sub.value.clone()),
+                                    "SOUR" => f.sources.push(sub.value.clone()),
+                                    _ => {}
+                                }
+                                j += 1;
                             }
-                            if i + 1 < ls.len() && ls[i + 1].tag == "PLAC" {
-                                i += 1;
-                                f.marriage_place = Some(ls[i].value.clone());
+                            // also push family marriage event
+                            let ev = Event {
+                                id: t.events.len() + 1,
+                                family_id: Some(f.gedcom_id.clone()),
+                                event_type: "MARR".into(),
+                                date: f.marriage_date.clone(),
+                                place: f.marriage_place.clone(),
+                                ..Default::default()
+                            };
+                            if f.marriage_date.is_some() || f.marriage_place.is_some() {
+                                t.events.push(ev);
                             }
+                            i = j - 1;
                         }
                         _ => {}
                     }
@@ -200,19 +315,65 @@ impl GedcomParser for LegacyGedcomParser {
                 continue;
             }
             if l.level == 0 && l.tag == "SOUR" {
-                t.sources.push(Source {
+                let mut s = Source {
                     id: t.sources.len() + 1,
                     gedcom_id: l.xref.clone().unwrap_or_default(),
                     title: l.value.clone(),
                     ..Default::default()
-                });
+                };
+                let lvl = l.level;
+                let mut j = i + 1;
+                while j < ls.len() && ls[j].level > lvl {
+                    let sub = &ls[j];
+                    match sub.tag.as_str() {
+                        "TITL"
+                            if (s.title.is_empty() || sub.value.len() > s.title.len()) => {
+                                s.title = sub.value.clone();
+                            }
+                        "AUTH" => s.author = Some(sub.value.clone()),
+                        "REPO" => s.repository = Some(sub.value.clone()),
+                        "PUBL" => {
+                            // treat PUBL as citation detail
+                            s.citation = Some(match &s.citation {
+                                Some(c) => format!("{c}; {}", sub.value),
+                                None => sub.value.clone(),
+                            });
+                        }
+                        "TEXT" => {
+                            s.citation = Some(match &s.citation {
+                                Some(c) => format!("{c} {}", sub.value),
+                                None => sub.value.clone(),
+                            });
+                        }
+                        "PAGE" => {
+                            s.citation = Some(match &s.citation {
+                                Some(c) => format!("{c} Page {}", sub.value),
+                                None => format!("Page {}", sub.value),
+                            });
+                        }
+                        "ABBR" | "DATA"
+                            // keep as citation if no other
+                            if s.citation.is_none() => {
+                                s.citation = Some(sub.value.clone());
+                            }
+                        _ => {}
+                    }
+                    j += 1;
+                }
+                // fallback title if empty
+                if s.title.is_empty() {
+                    s.title = format!("Source {}", s.gedcom_id);
+                }
+                t.sources.push(s);
             }
             i += 1;
         }
         for f in &t.families {
             for child in &f.children {
                 if let Some(p) = t.persons.iter_mut().find(|p| &p.gedcom_id == child) {
-                    p.family_child = Some(f.gedcom_id.clone());
+                    if p.family_child.is_none() {
+                        p.family_child = Some(f.gedcom_id.clone());
+                    }
                 }
             }
         }
