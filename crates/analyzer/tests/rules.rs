@@ -33,7 +33,10 @@ fn duplicate_detection_is_probabilistic() {
     let tree = neogenealogy_gedcom::LegacyGedcomParser
         .parse("0 @I1@ INDI\n1 NAME Juan /García/\n1 BIRT\n2 DATE 1872\n2 PLAC Madrid\n0 @I2@ INDI\n1 NAME Juan /García/\n1 BIRT\n2 DATE 1871\n2 PLAC Madrid\n")
         .unwrap();
-    let finding = analyze(&tree).into_iter().find(|f| f.kind == "POSSIBLE_DUPLICATE").unwrap();
+    let finding = analyze(&tree)
+        .into_iter()
+        .find(|f| f.kind == "POSSIBLE_DUPLICATE")
+        .unwrap();
     assert!(finding.confidence < 1.0);
     assert!(finding.description.contains("No fusionar"));
 }

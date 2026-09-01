@@ -26,25 +26,30 @@ fn lines(input: &str) -> Result<Vec<Line>, GedcomError> {
         .enumerate()
         .filter(|(_, s)| !s.trim().is_empty())
         .map(|(n, s)| {
-            let mut p = s.splitn(3, ' ');
-            let level = p
-                .next()
+            let tokens: Vec<&str> = s.split_whitespace().collect();
+            let level = tokens
+                .first()
+                .copied()
                 .and_then(|x| x.parse().ok())
                 .ok_or(GedcomError::InvalidLine(n + 1))?;
-            let second = p.next().ok_or(GedcomError::InvalidLine(n + 1))?;
-            let (xref, tag) = if second.starts_with('@') {
+            let second = tokens.get(1).ok_or(GedcomError::InvalidLine(n + 1))?;
+            let (xref, tag, value_start) = if second.starts_with('@') {
                 (
-                    Some(second.to_string()),
-                    p.next().ok_or(GedcomError::InvalidLine(n + 1))?.to_string(),
+                    Some((*second).to_string()),
+                    tokens
+                        .get(2)
+                        .ok_or(GedcomError::InvalidLine(n + 1))?
+                        .to_string(),
+                    3,
                 )
             } else {
-                (None, second.to_string())
+                (None, (*second).to_string(), 2)
             };
             Ok(Line {
                 level,
                 xref,
                 tag,
-                value: p.next().unwrap_or("").trim().to_string(),
+                value: tokens.get(value_start..).unwrap_or(&[]).join(" "),
             })
         })
         .collect()
