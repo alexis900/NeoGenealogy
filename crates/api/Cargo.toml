@@ -18,6 +18,7 @@ tower-http.workspace = true
 tracing-subscriber.workspace = true
 chrono.workspace = true
 sqlx.workspace = true
+tower.workspace = true
 
 [dev-dependencies]
 tower.workspace = true

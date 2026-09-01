@@ -20,7 +20,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "json"] }
 tempfile = "3"
 axum = { version = "0.7", features = ["json"] }
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "fs"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tower = "0.5"
 axum-test = "15"

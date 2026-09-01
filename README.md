@@ -1,9 +1,9 @@
-# NeoGenealogy
+# NeoGenealogy v0.2.0 — Research Queue + Web UI
 
-Herramienta local de análisis genealógico. Fase 2.1 — REST API Foundation (Axum).
+Herramienta local de análisis genealógico. Release v0.2.0 integra Research Queue explicable y Web UI.
 
 ```
-GEDCOM → Parser → Model → Analysis → Research Engine → Storage(SQLite) → API(Axum) → CLI/HTTP
+GEDCOM → Parser → Analyzer → Scoring → SQLite → Axum API → React Web → Docker
 ```
 
 ## Uso (sin DB — análisis directo)
@@ -41,11 +41,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, migraciones, repositories, `analysis_runs` snapshot
-- `api` — Axum REST `/api/v1` (read-only, expone storage)
-- `cli` — `analyze / import / stats / report / serve`
+- `storage` — SQLite, WAL, `analysis_runs` snapshot
+- `api` — Axum REST `/api/v1` (paginación, filtros, OpenAPI)
+- `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
+- `web/` — React 19 + Vite + Tailwind + React Router (Research Queue)
 
-Véase `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+Véase `docs/releases/v0.2.0.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
 
 ## Web UI
 
@@ -75,6 +76,18 @@ curl http://127.0.0.1:3000/api/v1/openapi.json
 ```
 
 Env: `NEOGENEALOGY_HOST`, `NEOGENEALOGY_PORT`, `NEOGENEALOGY_DATABASE_URL`, `NEOGENEALOGY_CORS_ORIGIN`.
+
+## Docker
+
+```bash
+cargo build -p neogenealogy
+npm --prefix web run build
+docker compose build
+docker compose up
+# en otra terminal
+docker compose exec neogenealogy neogenealogy import test-data/complex.ged --db /data/neogenealogy.db
+# abre http://localhost:3000/  (web servida por API, mismo origen)
+```
 
 ## Benchmark
 

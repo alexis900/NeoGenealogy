@@ -5,6 +5,7 @@ pub mod state;
 
 use axum::{
     http::{HeaderValue, Method},
+    response::IntoResponse,
     routing::get,
     Router,
 };
@@ -63,13 +64,27 @@ pub fn create_router(state: AppState) -> Router {
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 
-    Router::new()
+    let mut app = Router::new()
         .route("/health", get(handlers::health::health))
         .route("/ready", get(handlers::health::health))
         .nest("/api/v1", api)
         .with_state(state.clone())
         .layer(TraceLayer::new_for_http())
-        .layer(cors_layer())
+        .layer(cors_layer());
+
+    // Serve web/dist if exists (for single-origin deployment)
+    if std::path::Path::new("web/dist/index.html").exists() {
+        let svc = tower_http::services::ServeDir::new("web/dist").not_found_service(
+            tower::service_fn(|_req: axum::http::Request<axum::body::Body>| async {
+                let index = tokio::fs::read_to_string("web/dist/index.html")
+                    .await
+                    .unwrap_or_default();
+                Ok::<_, std::convert::Infallible>(axum::response::Html(index).into_response())
+            }),
+        );
+        app = app.fallback_service(svc);
+    }
+    app
 }
 
 fn cors_layer() -> CorsLayer {
@@ -85,6 +100,9 @@ fn cors_layer() -> CorsLayer {
         CorsLayer::new()
             .allow_origin("http://localhost:3000".parse::<HeaderValue>().unwrap())
             .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+            .allow_origin("http://127.0.0.1:3000".parse::<HeaderValue>().unwrap())
+            .allow_origin("http://127.0.0.1:5173".parse::<HeaderValue>().unwrap())
             .allow_methods([Method::GET])
+            .allow_headers([axum::http::header::CONTENT_TYPE])
     }
 }
