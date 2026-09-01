@@ -281,6 +281,7 @@ version = "0.1.0"
 dependencies = [
  "neogenealogy-core",
  "neogenealogy-gedcom",
+ "neogenealogy-scoring",
  "serde",
 ]
 
@@ -298,6 +299,7 @@ name = "neogenealogy-gedcom"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "neogenealogy-analyzer",
  "neogenealogy-core",
  "thiserror",
 ]
