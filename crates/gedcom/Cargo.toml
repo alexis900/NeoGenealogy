@@ -9,3 +9,6 @@ neogenealogy-core = { path = "../core" }
 chrono.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+neogenealogy-analyzer = { path = "../analyzer" }
+

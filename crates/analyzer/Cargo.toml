@@ -9,3 +9,4 @@ serde.workspace=true
 
 [dev-dependencies]
 neogenealogy-gedcom={path="../gedcom"}
+neogenealogy-scoring={path="../scoring"}
