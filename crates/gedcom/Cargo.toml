@@ -1,0 +1,11 @@
+[package]
+name = "neogenealogy-gedcom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neogenealogy-core = { path = "../core" }
+chrono.workspace = true
+thiserror.workspace = true
+

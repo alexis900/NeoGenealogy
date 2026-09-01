@@ -1,0 +1,11 @@
+[package]
+name="neogenealogy-scoring"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[dependencies]
+neogenealogy-core={path="../core"}
+neogenealogy-analyzer={path="../analyzer"}
+
+[dev-dependencies]
+neogenealogy-gedcom={path="../gedcom"}

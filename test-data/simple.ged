@@ -1,0 +1,31 @@
+0 HEAD
+1 CHAR UTF-8
+1 GEDC
+2 VERS 5.5.1
+0 @I1@ INDI
+1 NAME Juan /García/
+1 SEX M
+1 BIRT
+2 DATE 1874
+2 PLAC Alcalá la Real
+1 FAMS @F1@
+0 @I2@ INDI
+1 NAME María /López/
+1 SEX F
+1 BIRT
+2 DATE 1878
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Pedro /García/
+1 BIRT
+2 DATE 1902
+1 FAMC @F1@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 1901
+2 PLAC Alcalá la Real
+0 TRLR
+
