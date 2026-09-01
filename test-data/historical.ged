@@ -1,9 +1,103 @@
 0 HEAD
-1 CHAR ANSEL
+1 CHAR UTF-8
+1 GEDC
+2 VERS 5.5.1
+1 SOUR Historical archive
+0 @S1@ SOUR
+1 TITL Libro de bautismos de Alcalá la Real (1560-1700)
+1 AUTH Archivo Parroquial
+1 PUBL Libro 1, fol. 23
+0 @S2@ SOUR
+1 TITL Catastro de Ensenada
+1 AUTH Archivo de Simancas
 0 @I1@ INDI
 1 NAME Joost /Van der Meer/
+1 SEX M
 1 BIRT
 2 DATE 12 MAR 1690
 2 PLAC Amsterdam
 1 NOTE Imported from historical register
+0 @I2@ INDI
+1 NAME Alonso /García/
+1 SEX M
+1 BIRT
+2 DATE ABT 1580
+2 PLAC Alcalá la Real, Reino de Granada
+1 DEAT
+2 DATE BEF 1650
+2 PLAC Alcalá la Real
+1 FAMS @F1@
+1 SOUR @S1@
+0 @I3@ INDI
+1 NAME Catalina /López/
+1 SEX F
+1 BIRT
+2 DATE AFT 1590
+2 PLAC Priego de Córdoba
+1 FAMS @F1@
+1 BIRT
+2 DATE BET 1585 AND 1595
+2 PLAC Priego
+1 NOTE Fecha entre intervalo histórico
+0 @I4@ INDI
+1 NAME Diego /García López/
+1 SEX M
+1 BIRT
+2 DATE BET 1610 AND 1620
+2 PLAC Alcalá la Real
+1 FAMC @F1@
+1 BAPM
+2 DATE 1615
+2 PLAC Alcalá la Real
+1 RESI
+2 DATE FROM 1630 TO 1650
+2 PLAC Granada
+1 FAMS @F2@
+1 SOUR @S1@
+0 @I5@ INDI
+1 NAME María /Sánchez/
+1 SEX F
+1 BIRT
+2 DATE FROM 1615 TO 1625
+2 PLAC Montefrío
+1 FAMS @F2@
+0 @I6@ INDI
+1 NAME Francisco /García Sánchez/
+1 SEX M
+1 BIRT
+2 DATE ABT 1645
+2 PLAC Alcalá la Real
+1 FAMC @F2@
+1 FAMS @F3@
+1 DEAT
+2 DATE AFT 1700
+1 NOTE Lugar histórico sin registro exacto
+0 @I7@ INDI
+1 NAME Ana /Martínez/
+1 SEX F
+1 BIRT
+2 DATE 1660
+2 PLAC Jaén
+1 FAMS @F3@
+0 @F1@ FAM
+1 HUSB @I2@
+1 WIFE @I3@
+1 CHIL @I4@
+1 MARR
+2 DATE ABT 1610
+2 PLAC Alcalá la Real
+1 SOUR @S1@
+0 @F2@ FAM
+1 HUSB @I4@
+1 WIFE @I5@
+1 CHIL @I6@
+1 MARR
+2 DATE BET 1640 AND 1642
+2 PLAC Alcalá la Real
+0 @F3@ FAM
+1 HUSB @I6@
+1 WIFE @I7@
+1 MARR
+2 DATE FROM 1680 TO 1685
+2 PLAC Jaén
 0 TRLR

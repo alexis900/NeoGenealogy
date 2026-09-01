@@ -2,30 +2,101 @@
 1 CHAR UTF-8
 1 GEDC
 2 VERS 5.5.1
-0 @S1@ SOUR Parish register of Alcalá
-1 AUTH Archivo parroquial
+1 SOUR NeoGenealogy
+0 @S1@ SOUR
+1 TITL Parish register of Alcalá la Real, Book 4, Page 127
+1 AUTH Archivo Parroquial de Alcalá
+1 PUBL Book 4, Entry 32
+1 TEXT Baptism record of García family, verified
+0 @S2@ SOUR FamilySearch
+1 TITL FamilySearch generic index
+0 @S3@ SOUR
+1 TITL Protocolo notarial de Granada 1780-1800
+1 AUTH Archivo Histórico
 0 @I1@ INDI
 1 NAME Francisco /García/
+1 SEX M
 1 BIRT
 2 DATE ABT 1760
-2 PLAC Alcalá la Real
+2 PLAC Alcalá la Real, Granada, España
+1 OCCU Labrador
 1 FAMS @F1@
 1 SOUR @S1@
+2 PAGE Book 4, Page 127, Entry 32
+1 NOTE Originario de Alcalá la Real
+1 _CUSTOM preserved ancestor
 0 @I2@ INDI
 1 NAME María /López Ruiz/
+1 SEX F
 1 BIRT
 2 DATE 1764
+2 PLAC Alcalá la Real
 1 FAMS @F1@
+1 NOTE Sin fuente documental
 0 @I3@ INDI
 1 NAME Juan /García López/
+1 SEX M
 1 BIRT
 2 DATE 1785
+2 PLAC Alcalá la Real
 1 FAMC @F1@
+1 FAMS @F2@
+1 DEAT
+2 DATE BEF 1850
+2 PLAC Granada
 0 @I4@ INDI
 1 NAME Carmen /Pérez/
+1 SEX F
 1 BIRT
 2 DATE 1790
+2 PLAC Priego de Córdoba
 1 FAMS @F2@
+0 @I5@ INDI
+1 NAME Pedro /García López/
+1 SEX M
+1 BIRT
+2 DATE BET 1808 AND 1810
+2 PLAC Alcalá la Real
+1 FAMC @F2@
+1 FAMS @F3@
+0 @I6@ INDI
+1 NAME Ana /Martínez Sánchez/
+1 SEX F
+1 BIRT
+2 DATE AFT 1810
+2 PLAC Montefrío, Granada
+1 FAMS @F3@
+1 SOUR @S2@
+1 OCCU Ama de casa
+0 @I7@ INDI
+1 NAME Juan /García/
+1 SEX M
+1 BIRT
+2 DATE 1786
+2 PLAC Alcalá la Real
+1 FAMS @F4@
+1 NOTE Posible duplicado de Juan García López
+0 @I8@ INDI
+1 NAME Isabel /Sánchez/
+1 SEX F
+1 BIRT
+2 DATE FROM 1795 TO 1800
+2 PLAC Alcalá la Real
+1 FAMS @F4@
+1 BAPM
+2 DATE 1801
+2 PLAC Alcalá la Real
+0 @I9@ INDI
+1 NAME Diego /García López/
+1 SEX M
+1 BIRT
+2 DATE 1812
+2 PLAC Alcalá la Real
+1 FAMC @F2@
+1 DEAT
+2 DATE 1813
+2 PLAC Alcalá la Real
+1 NOTE Fallecido infante
 0 @F1@ FAM
 1 HUSB @I1@
 1 WIFE @I2@
@@ -37,7 +108,33 @@
 0 @F2@ FAM
 1 HUSB @I3@
 1 WIFE @I4@
-1 CHIL @I1@
+1 CHIL @I5@
+1 CHIL @I9@
 1 MARR
-2 DATE 1850
+2 DATE 1809
+2 PLAC Alcalá la Real
+0 @F3@ FAM
+1 HUSB @I5@
+1 WIFE @I6@
+1 CHIL @I10@
+1 MARR
+2 DATE 1832
+2 PLAC Granada
+0 @F4@ FAM
+1 HUSB @I7@
+1 WIFE @I8@
+1 MARR
+2 DATE 1805
+2 PLAC Alcalá la Real
+0 @I10@ INDI
+1 NAME Miguel /García Martínez/
+1 SEX M
+1 BIRT
+2 DATE 1835
+2 PLAC Granada
+1 FAMC @F3@
+1 NOTE Generación más reciente, sin padres desconocidos? tiene padres conocidos
+0 @S4@ SOUR
+1 TITL Padrones de Alcalá 1760-1800
+1 AUTH Archivo Municipal
 0 TRLR
