@@ -1,45 +1,62 @@
 # NeoGenealogy
 
-Herramienta local de análisis genealógico. Fase 1.6 — Research Engine v2: motor explicable, priorización por ramas y cobertura documental.
+Herramienta local de análisis genealógico. Fase 2.0 — Persistence Foundation (SQLite).
 
 ```
-GEDCOM → Parser → Modelo → Analysis → Research Engine → Score explicable → Research Queue
+GEDCOM → Parser → Model → Analysis → Research Engine → Storage(SQLite) → CLI
 ```
 
-## Uso
+## Uso (sin DB — análisis directo)
 
 ```bash
 cargo run -p neogenealogy -- analyze test-data/simple.ged --output analysis.json
 cargo run -p neogenealogy -- analyze test-data/complex.ged --explain-score
 cargo run -p neogenealogy -- analyze test-data/complex.ged --severity high
 cargo run -p neogenealogy -- analyze test-data/complex.ged --severity high --sort confidence
-cargo run -p neogenealogy -- import test-data/simple.ged
 cargo run -p neogenealogy -- stats test-data/simple.ged
 cargo run -p neogenealogy -- report test-data/simple.ged --output report.html
 ```
 
-El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw`; los datos originales no se normalizan destructivamente. La interfaz `GedcomParser` permite sustituirlo por un parser de GEDCOM 7 o GEDCOM-X en una fase posterior.
+## Uso (con SQLite)
 
-## Research Engine
+```bash
+# Importar y persistir (transacción atómica, WAL, foreign_keys=ON)
+cargo run -p neogenealogy -- import test-data/complex.ged --db neogenealogy.db
+cargo run -p neogenealogy -- import test-data/complex.ged --db /tmp/neogenealogy.db
 
-Véase `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+# Consultar desde DB
+cargo run -p neogenealogy -- stats --db neogenealogy.db
+cargo run -p neogenealogy -- report --db neogenealogy.db --output report.html
 
-Destaca:
+# Migraciones (automáticas en CLI) o manual:
+# sqlx migrate run  # requiere DATABASE_URL=sqlite://neogenealogy.db
+sqlite3 neogenealogy.db ".tables"
+```
 
-- `neogenealogy analyze --explain-score` muestra `ScoreBreakdown { total, components: [{name, points, reason}] }` y `confidence` separado.
-- `branches` con `branch_score = 0.6*max + 0.4*avg(top5)` — calidad sobre cantidad.
-- `source_coverage` (birth/marriage/death/events/overall) y por rama.
-- Detección de ciclos `RELATIONSHIP_ANOMALY Critical` sin romper el análisis.
+El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` → `persons.raw_tags` JSON; `SOUR` vs `citación` se distingue (`sources` vs `citations`). `GedcomParser` es reemplazable.
+
+## Capas
+
+- `core` — modelo genealógico
+- `gedcom` — parser conservador
+- `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
+- `scoring` — Research Score 0–100 explicable
+- `storage` — SQLite, migraciones, repositories, `analysis_runs` snapshot
+- `cli` — interfaz actual (futura API Axum usará `storage`)
+
+Véase `docs/STORAGE.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
 
 ## Benchmark
 
 ```bash
 rustc benchmarks/generate.rs -o /tmp/gen
-/tmp/gen 1000 > /tmp/bench-1000.ged
-cargo run --release -p neogenealogy -- stats /tmp/bench-1000.ged
+/tmp/gen 1000  > /tmp/bench-1000.ged
+/tmp/gen 5000  > /tmp/bench-5000.ged
+/tmp/gen 10000 > /tmp/bench-10000.ged
+/usr/bin/time -f "%e sec %M KB" cargo run --release -p neogenealogy -- import /tmp/bench-1000.ged --db /tmp/bench.db
 ```
 
-Véase `benchmarks/README.md` para resultados y regresión.
+Véase `benchmarks/README.md` para baseline (parse/analysis/persist).
 
 ## Verificación
 

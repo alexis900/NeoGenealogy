@@ -1,0 +1,26 @@
+[package]
+name = "neogenealogy-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neogenealogy-core = { path = "../core" }
+neogenealogy-gedcom = { path = "../gedcom" }
+neogenealogy-analyzer = { path = "../analyzer" }
+neogenealogy-scoring = { path = "../scoring" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "json"] }
+
+[dev-dependencies]
+neogenealogy-gedcom = { path = "../gedcom" }
+neogenealogy-analyzer = { path = "../analyzer" }
+neogenealogy-scoring = { path = "../scoring" }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+tempfile = "3"

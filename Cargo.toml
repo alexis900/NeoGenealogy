@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/gedcom", "crates/analyzer", "crates/scoring", "crates/cli"]
+members = ["crates/core", "crates/gedcom", "crates/analyzer", "crates/scoring", "crates/storage", "crates/cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,4 +15,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
 unicode-normalization = "0.1"
+tracing = "0.1"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "chrono", "json"] }
+tempfile = "3"
 
