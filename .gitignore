@@ -1,0 +1,4 @@
+/target/
+*.json
+*.html
+.DS_Store
