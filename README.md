@@ -45,7 +45,22 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `api` — Axum REST `/api/v1` (read-only, expone storage)
 - `cli` — `analyze / import / stats / report / serve`
 
-Véase `docs/API.md`, `docs/STORAGE.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+Véase `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+
+## Web UI
+
+```bash
+cargo run -p neogenealogy -- import test-data/complex.ged --db /tmp/neogenealogy.db
+cargo run -p neogenealogy -- serve --db /tmp/neogenealogy.db --host 127.0.0.1 --port 3000
+cd web
+npm install
+echo "VITE_API_BASE_URL=http://127.0.0.1:3000" > .env
+npm run dev    # http://localhost:5173
+npm run build  # tsc -b && vite build
+npm run test   # vitest run
+```
+
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research`, `/trees/:treeId/persons/:personId`, `/trees/:treeId/findings`, `/trees/:treeId/branches`, `/trees/:treeId/sources`.
 
 ## API REST
 
