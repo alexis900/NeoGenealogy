@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 [dependencies]
 neogenealogy-core={path="../core"}
+serde.workspace=true
 
 [dev-dependencies]
 neogenealogy-gedcom={path="../gedcom"}

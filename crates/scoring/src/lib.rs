@@ -1,3 +1,64 @@
 use neogenealogy_core::*;
-pub fn opportunities(t:&GenealogyTree, findings:&[Finding])->Vec<ResearchOpportunity>{let mut out=vec![];for p in &t.persons{let fs:Vec<_>=findings.iter().filter(|f|f.person_id.as_deref()==Some(&p.gedcom_id)).collect();let mut score=0u16;let mut reasons=vec![];let mut missing=vec![];if p.family_child.is_none(){score+=25;reasons.push("+25 Padre o madre desconocido".into());missing.push("progenitores".into());}if p.birth_place.is_some(){score+=15;reasons.push("+15 Lugar conocido".into());}if p.birth_date.is_some(){score+=10;reasons.push("+10 Fecha conocida".into());}if p.sources.is_empty(){score+=10;reasons.push("+10 Sin fuentes asociadas".into());}score+=((fs.len() as u16)*5).min(20);if !fs.is_empty(){reasons.push(format!("+{} Hallazgos que requieren verificación",(fs.len()*5).min(20)));}if score>0{let score=score.min(100) as u8;let priority=if score>=85{Severity::Critical}else if score>=65{Severity::High}else if score>=35{Severity::Medium}else{Severity::Low};out.push(ResearchOpportunity{person_id:p.gedcom_id.clone(),score,priority,reasons,suggested_sources:vec!["registros parroquiales".into(),"matrimonios".into(),"padrones".into(),"protocolos notariales".into()],missing_information:missing});}}out.sort_by_key(|x|std::cmp::Reverse(x.score));out}
-
+pub fn opportunities(t: &GenealogyTree, findings: &[Finding]) -> Vec<ResearchOpportunity> {
+    let mut out = vec![];
+    for p in &t.persons {
+        let fs: Vec<_> = findings
+            .iter()
+            .filter(|f| f.person_id.as_deref() == Some(&p.gedcom_id))
+            .collect();
+        let mut score = 0u16;
+        let mut reasons = vec![];
+        let mut missing = vec![];
+        if p.family_child.is_none() {
+            score += 25;
+            reasons.push("+25 Padre o madre desconocido".into());
+            missing.push("progenitores".into());
+        }
+        if p.birth_place.is_some() {
+            score += 15;
+            reasons.push("+15 Lugar conocido".into());
+        }
+        if p.birth_date.is_some() {
+            score += 10;
+            reasons.push("+10 Fecha conocida".into());
+        }
+        if p.sources.is_empty() {
+            score += 10;
+            reasons.push("+10 Sin fuentes asociadas".into());
+        }
+        score += ((fs.len() as u16) * 5).min(20);
+        if !fs.is_empty() {
+            reasons.push(format!(
+                "+{} Hallazgos que requieren verificación",
+                (fs.len() * 5).min(20)
+            ));
+        }
+        if score > 0 {
+            let score = score.min(100) as u8;
+            let priority = if score >= 85 {
+                Severity::Critical
+            } else if score >= 65 {
+                Severity::High
+            } else if score >= 35 {
+                Severity::Medium
+            } else {
+                Severity::Low
+            };
+            out.push(ResearchOpportunity {
+                person_id: p.gedcom_id.clone(),
+                score,
+                priority,
+                reasons,
+                suggested_sources: vec![
+                    "registros parroquiales".into(),
+                    "matrimonios".into(),
+                    "padrones".into(),
+                    "protocolos notariales".into(),
+                ],
+                missing_information: missing,
+            });
+        }
+    }
+    out.sort_by_key(|x| std::cmp::Reverse(x.score));
+    out
+}

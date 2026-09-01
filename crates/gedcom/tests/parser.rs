@@ -8,11 +8,19 @@ fn imports_people_families_and_relationships() {
     assert_eq!(tree.families.len(), 1);
     assert_eq!(tree.persons[0].surname, "Pérez");
     assert_eq!(tree.persons[1].family_child.as_deref(), Some("@F1@"));
-    assert_eq!(tree.persons[0].birth_date.as_ref().unwrap().year, Some(1800));
+    assert_eq!(
+        tree.persons[0].birth_date.as_ref().unwrap().year,
+        Some(1800)
+    );
 }
 
 #[test]
 fn preserves_unknown_tags() {
-    let tree = LegacyGedcomParser.parse("0 @I1@ INDI\n1 NAME Ana /Pérez/\n1 _CUSTOM preserved\n").unwrap();
-    assert!(tree.persons[0].raw.iter().any(|tag| tag.tag == "_CUSTOM" && tag.value == "preserved"));
+    let tree = LegacyGedcomParser
+        .parse("0 @I1@ INDI\n1 NAME Ana /Pérez/\n1 _CUSTOM preserved\n")
+        .unwrap();
+    assert!(tree.persons[0]
+        .raw
+        .iter()
+        .any(|tag| tag.tag == "_CUSTOM" && tag.value == "preserved"));
 }

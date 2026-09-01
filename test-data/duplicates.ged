@@ -1,0 +1,12 @@
+0 HEAD
+0 @I1@ INDI
+1 NAME Juan /García López/
+1 BIRT
+2 DATE 1872
+2 PLAC Alcalá la Real
+0 @I2@ INDI
+1 NAME Juan /García/
+1 BIRT
+2 DATE 1871
+2 PLAC Alcala la Real
+0 TRLR

@@ -1,0 +1,12 @@
+0 HEAD
+0 @I1@ INDI
+1 NAME Ana /Pérez/
+1 BIRT
+2 DATE 1800
+2 PLAC Alcalá la Real
+0 @I2@ INDI
+1 NAME Luis /Díaz/
+1 BIRT
+2 DATE 1801
+2 PLAC Alcala la Real
+0 TRLR

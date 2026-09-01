@@ -1,0 +1,43 @@
+0 HEAD
+1 CHAR UTF-8
+1 GEDC
+2 VERS 5.5.1
+0 @S1@ SOUR Parish register of Alcalá
+1 AUTH Archivo parroquial
+0 @I1@ INDI
+1 NAME Francisco /García/
+1 BIRT
+2 DATE ABT 1760
+2 PLAC Alcalá la Real
+1 FAMS @F1@
+1 SOUR @S1@
+0 @I2@ INDI
+1 NAME María /López Ruiz/
+1 BIRT
+2 DATE 1764
+1 FAMS @F1@
+0 @I3@ INDI
+1 NAME Juan /García López/
+1 BIRT
+2 DATE 1785
+1 FAMC @F1@
+0 @I4@ INDI
+1 NAME Carmen /Pérez/
+1 BIRT
+2 DATE 1790
+1 FAMS @F2@
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 CHIL @I3@
+1 MARR
+2 DATE 1783
+2 PLAC Alcalá la Real
+1 SOUR @S1@
+0 @F2@ FAM
+1 HUSB @I3@
+1 WIFE @I4@
+1 CHIL @I1@
+1 MARR
+2 DATE 1850
+0 TRLR
