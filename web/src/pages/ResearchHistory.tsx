@@ -85,6 +85,7 @@ export default function ResearchHistory(){
           const a=o.evidence_assessment;
           const evidenceCount = a ? a.evidence_total : (o.evidence ? o.evidence.length : 0);
           const gaps = o.evidence_gaps || [];
+          const followups = o.research_followups || [];
           const gapLabel = gaps.length===0 ? "" : gaps.length===1 ? `Gaps: 1 ${gaps[0].severity.toLowerCase()}` : `Gaps: ${gaps.length}`;
           // alternative: count warnings
           const warningCount = gaps.filter((g:any)=>g.severity==="WARNING").length;
@@ -99,6 +100,7 @@ export default function ResearchHistory(){
             <span className="col-span-3 text-gray-700">
               {a ? `Assessment: ${formatAssessmentStatus(a.status)} · ${a.score}` : "—"}
               {gapDisplay && <span className="ml-2 text-xs">{gapDisplay}</span>}
+              {followups.length>0 && <span className="ml-2 text-xs">Follow-ups: {followups.length}</span>}
             </span>
           </div>
           {o.details && <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{o.details}</div>}

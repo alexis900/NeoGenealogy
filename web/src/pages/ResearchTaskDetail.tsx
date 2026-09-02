@@ -32,6 +32,7 @@ export default function ResearchTaskDetail(){
   const [evidence,setEvidence]=useState<any[]>([]);
   const [assessment,setAssessment]=useState<any>(null);
   const [gaps,setGaps]=useState<any[]>([]);
+  const [followups,setFollowups]=useState<any[]>([]);
   const [sources,setSources]=useState<any[]>([]);
   const [citations,setCitations]=useState<any[]>([]);
   const [showAddEvidence,setShowAddEvidence]=useState(false);
@@ -50,9 +51,10 @@ export default function ResearchTaskDetail(){
           setEvidence(detailed.evidence||[]);
           setAssessment((detailed as any).evidence_assessment || null);
           setGaps((detailed as any).evidence_gaps || []);
-        }catch{ setEvidence([]); setAssessment(null); setGaps([]); }
+          setFollowups((detailed as any).research_followups || []);
+        }catch{ setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); }
       } else {
-        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]);
+        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
       }
       if(t.opportunity_id){
         try{
@@ -100,14 +102,14 @@ export default function ResearchTaskDetail(){
       const o=await api.createOutcome(tid,id,{type:outcomeType, summary:outcomeSummary, details:outcomeDetails||undefined});
       try{
         const detailed=await api.getOutcome(tid, o.id);
-        if((detailed as any).id===o.id){
-          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]);
-        } else {
-          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]);
+          if((detailed as any).id===o.id){
+            setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]);
+          } else {
+            setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
+          }
+        }catch{
+          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
         }
-      }catch{
-        setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]);
-      }
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
   const updateOutcome=async()=>{
@@ -118,7 +120,7 @@ export default function ResearchTaskDetail(){
       try{
         const detailed=await api.getOutcome(tid,task.outcome.id);
         if((detailed as any).id===task.outcome.id){
-          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]);
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]);
         } else {
           setTask({...task, outcome:o});
         }
@@ -132,7 +134,7 @@ export default function ResearchTaskDetail(){
     if(!confirm("Delete outcome?")) return;
     try{
       await api.deleteOutcome(tid,task.outcome.id);
-      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]);
+      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
     }catch(e:any){setErr(e.message)}
   };
   const addEvidence=async()=>{
@@ -146,6 +148,7 @@ export default function ResearchTaskDetail(){
       setEvidence(detailed.evidence||[]);
       setAssessment((detailed as any).evidence_assessment||null);
       setGaps((detailed as any).evidence_gaps||[]);
+      setFollowups((detailed as any).research_followups||[]);
       setEvStatement(""); setEvNotes(""); setEvCitationId(""); setEvSourceId(""); setShowAddEvidence(false);
     }catch(e:any){setErr(e.message)} finally{setEvSaving(false)}
   };
@@ -158,6 +161,7 @@ export default function ResearchTaskDetail(){
       setEvidence(detailed.evidence||[]);
       setAssessment((detailed as any).evidence_assessment||null);
       setGaps((detailed as any).evidence_gaps||[]);
+      setFollowups((detailed as any).research_followups||[]);
     }catch(e:any){setErr(e.message)}
   };
 
@@ -271,6 +275,31 @@ export default function ResearchTaskDetail(){
               <div className="text-xs text-red-700 mt-1">⚠ Critical evidence gap</div>
             )}
           </div>
+
+          {/* Research Follow-ups */}
+          {followups.length>0 && (
+            <div className="border rounded p-3 bg-gray-50 space-y-2">
+              <div className="text-sm font-semibold">Research Follow-ups</div>
+              <div className="space-y-2">
+                {followups.map((f:any)=>(
+                  <div key={f.code} className={`rounded px-3 py-2 text-sm ${f.priority==="HIGH"?"bg-red-50 border border-red-200 text-red-800": f.priority==="MEDIUM"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-blue-50 border border-blue-200 text-blue-800"}`}>
+                    <div className="text-xs font-semibold opacity-70">{f.priority}</div>
+                    <div className="font-semibold">{f.title}</div>
+                    <div className="text-xs mt-0.5">{f.description}</div>
+                    {f.gap_code && <div className="text-xs mt-1 opacity-70">Gap: {f.gap_code}</div>}
+                    <div className="mt-2">
+                      {(f.code==="ADD_SUPPORTING_EVIDENCE" || f.code==="ADD_SECOND_SUPPORTING_EVIDENCE") && (
+                        <button onClick={()=>setShowAddEvidence(true)} className="text-xs px-2 py-1 bg-emerald-600 text-white rounded">Add Evidence</button>
+                      )}
+                      {(f.code==="ADD_CITATION" || f.code==="REVIEW_CONTRADICTION" || f.code==="REVIEW_SOURCE_COVERAGE") && (
+                        <button onClick={()=>{const el=document.getElementById("evidence-section"); el?.scrollIntoView({behavior:"smooth"});}} className="text-xs px-2 py-1 bg-blue-600 text-white rounded">Review Evidence</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div id="evidence-section" className="border rounded p-3 bg-gray-50">
             <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Evidence</h4><span className="text-xs text-gray-600">{evidence.length} attached</span></div>

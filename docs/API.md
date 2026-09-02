@@ -199,6 +199,22 @@ GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,e
 
 Ver `docs/EVIDENCE_GAPS.md` para `Assessment vs Gaps` y ejemplos.
 
+## Research Follow-ups — Fase 4.3
+
+```
+GET /api/v1/trees/1/research-outcomes/5 → {evidence:[], evidence_assessment:{...}, evidence_gaps:[...], research_followups:[{code,priority,title,description,gap_code}]}
+GET /api/v1/trees/1/research-outcomes?limit=20 → {items:[{evidence,evidence_assessment,evidence_gaps,research_followups}], pagination}
+GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,evidence,assessment,evidence_gaps,research_followups:{high,medium,low}}
+```
+
+- `ResearchFollowUp.code` ∈ ADD_SUPPORTING_EVIDENCE,ADD_CITATION,REVIEW_CONTRADICTION,ADD_SECOND_SUPPORTING_EVIDENCE,REVIEW_SOURCE_COVERAGE — ver `docs/RESEARCH_FOLLOWUPS.md`.
+- `priority` ∈ HIGH,MEDIUM,LOW (HIGH: `ADD_SUPPORTING_EVIDENCE`/`REVIEW_CONTRADICTION`, MEDIUM: `ADD_CITATION`/`ADD_SECOND_SUPPORTING_EVIDENCE`, LOW: `REVIEW_SOURCE_COVERAGE`).
+- `calculate_research_followups(outcome_type, stats, gaps)` puro, determinista, sin persistencia; deduplica por `code` y ordena `HIGH→MEDIUM→LOW` estable.
+- `GET /research-outcomes` y `GET /research-outcomes/:id` coinciden con JSON real (`research_followups` incluido, `[]` si ninguno, batch sin N+1).
+- OpenAPI documenta `ResearchFollowUp`, `ResearchFollowUpCode`, `ResearchFollowUpPriority`, `research_followups`.
+
+Ver `docs/RESEARCH_FOLLOWUPS.md` para `Gap → Follow-up`, prioridades y qué NO es un Follow-up.
+
 ## Errores
 
 ```json

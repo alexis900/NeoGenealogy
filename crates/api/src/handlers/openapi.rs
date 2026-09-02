@@ -24,7 +24,7 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-opportunities/{opportunity_id}/tasks": { "post": { "summary": "Create task from opportunity" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/outcome": { "post": { "summary": "Create research outcome for task" } },
             "/api/v1/trees/{tree_id}/research-outcomes": { "get": { "summary": "List research outcomes", "parameters": [{"name":"type"},{"name":"task_id"},{"name":"person_id"},{"name":"assessment_status","description":"Filter by Evidence Assessment status: NO_EVIDENCE,WEAK,MIXED,SUPPORTED,STRONGLY_SUPPORTED"},{"name":"gap","description":"Filter by Evidence Gap code: NO_SUPPORTING_EVIDENCE,NO_CITATION,SINGLE_SUPPORTING_EVIDENCE,CONTRADICTORY_EVIDENCE,SINGLE_SOURCE,CONFIRMED_WITHOUT_SUPPORT"}] } },
-            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome", "description": "Returns outcome with evidence[], evidence_assessment {score,status,...reasons} and evidence_gaps [{code,severity,title,description}]" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
+            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome", "description": "Returns outcome with evidence[], evidence_assessment {score,status,...reasons}, evidence_gaps [{code,severity,title,description}] and research_followups [{code,priority,title,description,gap_code}]" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
             "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes/sources/evidence/assessment/evidence_gaps counts)" } },
             "/api/v1/trees/{tree_id}/sources": { "get": { "summary": "List research sources", "parameters": [{"name":"type"}] }, "post": { "summary": "Create research source" } },
             "/api/v1/trees/{tree_id}/sources/{source_id}": { "get": { "summary": "Get research source" }, "patch": { "summary": "Update research source" }, "delete": { "summary": "Delete research source" } },
@@ -80,6 +80,18 @@ pub async fn get_openapi() -> Json<Value> {
                         "description": { "type": "string" }
                     }
                 },
+                "ResearchFollowUp": {
+                    "type": "object",
+                    "properties": {
+                        "code": { "type": "string", "enum": ["ADD_SUPPORTING_EVIDENCE","ADD_CITATION","REVIEW_CONTRADICTION","ADD_SECOND_SUPPORTING_EVIDENCE","REVIEW_SOURCE_COVERAGE"] },
+                        "priority": { "type": "string", "enum": ["HIGH","MEDIUM","LOW"] },
+                        "title": { "type": "string" },
+                        "description": { "type": "string" },
+                        "gap_code": { "type": "string" }
+                    }
+                },
+                "ResearchFollowUpCode": { "type": "string", "enum": ["ADD_SUPPORTING_EVIDENCE","ADD_CITATION","REVIEW_CONTRADICTION","ADD_SECOND_SUPPORTING_EVIDENCE","REVIEW_SOURCE_COVERAGE"] },
+                "ResearchFollowUpPriority": { "type": "string", "enum": ["HIGH","MEDIUM","LOW"] },
                 "ResearchOutcome": {
                     "type": "object",
                     "properties": {
@@ -93,7 +105,8 @@ pub async fn get_openapi() -> Json<Value> {
                         "updated_at": { "type": "string" },
                         "evidence": { "type": "array" },
                         "evidence_assessment": { "$ref": "#/components/schemas/EvidenceAssessment" },
-                        "evidence_gaps": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceGap" } }
+                        "evidence_gaps": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceGap" } },
+                        "research_followups": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowUp" } }
                     }
                 }
             }

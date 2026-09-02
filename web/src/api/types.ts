@@ -93,12 +93,19 @@ export interface EvidenceGap {
   code: GapCode; severity: GapSeverity; title: string; description: string;
 }
 
+export type FollowUpCode = "ADD_SUPPORTING_EVIDENCE" | "ADD_CITATION" | "REVIEW_CONTRADICTION" | "ADD_SECOND_SUPPORTING_EVIDENCE" | "REVIEW_SOURCE_COVERAGE";
+export type FollowUpPriority = "HIGH" | "MEDIUM" | "LOW";
+export interface ResearchFollowUp {
+  code: FollowUpCode; priority: FollowUpPriority; title: string; description: string; gap_code: GapCode;
+}
+
 export interface ResearchOutcome {
   id:number; tree_id:number; task_id:number; type:OutcomeType; summary:string; details?:string|null;
   created_at:string; updated_at:string;
   evidence?: EvidenceWithRelationship[];
   evidence_assessment?: EvidenceAssessment | null;
   evidence_gaps?: EvidenceGap[];
+  research_followups?: ResearchFollowUp[];
 }
 
 export type SourceType = "BOOK"|"REGISTER"|"CENSUS"|"CIVIL_RECORD"|"PARISH_RECORD"|"NEWSPAPER"|"WEBSITE"|"OTHER";

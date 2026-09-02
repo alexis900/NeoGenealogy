@@ -39,6 +39,15 @@ pub struct EvidenceGap {
     pub description: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ResearchFollowUp {
+    pub code: String,
+    pub priority: String,
+    pub title: String,
+    pub description: String,
+    pub gap_code: String,
+}
+
 pub fn calculate_evidence_assessment(stats: &EvidenceStats) -> EvidenceAssessment {
     let mut score: i32 = 0;
     let mut reasons: Vec<AssessmentReason> = Vec::new();
@@ -220,6 +229,98 @@ pub fn calculate_evidence_gaps(outcome_type: &str, stats: &EvidenceStats) -> Vec
     }
 
     gaps
+}
+
+pub fn calculate_research_followups(
+    _outcome_type: &str,
+    _stats: &EvidenceStats,
+    gaps: &[EvidenceGap],
+) -> Vec<ResearchFollowUp> {
+    use std::collections::HashSet;
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut followups: Vec<ResearchFollowUp> = Vec::new();
+
+    for gap in gaps {
+        let (code, priority, title, description) = match gap.code.as_str() {
+            "CONFIRMED_WITHOUT_SUPPORT" => (
+                "ADD_SUPPORTING_EVIDENCE",
+                "HIGH",
+                "Add supporting evidence",
+                "This confirmed outcome has no supporting evidence recorded.",
+            ),
+            "NO_SUPPORTING_EVIDENCE" => (
+                "ADD_SUPPORTING_EVIDENCE",
+                "HIGH",
+                "Add supporting evidence",
+                "No supporting evidence is currently recorded for this outcome.",
+            ),
+            "NO_CITATION" => (
+                "ADD_CITATION",
+                "MEDIUM",
+                "Add a citation",
+                "Supporting evidence is recorded without a citation.",
+            ),
+            "SINGLE_SUPPORTING_EVIDENCE" => (
+                "ADD_SECOND_SUPPORTING_EVIDENCE",
+                "MEDIUM",
+                "Add another supporting evidence",
+                "This outcome currently has a single supporting evidence record.",
+            ),
+            "CONTRADICTORY_EVIDENCE" => (
+                "REVIEW_CONTRADICTION",
+                "HIGH",
+                "Review contradictory evidence",
+                "Supporting and contradicting evidence are both recorded for this outcome.",
+            ),
+            "SINGLE_SOURCE" => (
+                "REVIEW_SOURCE_COVERAGE",
+                "LOW",
+                "Review source coverage",
+                "Evidence for this outcome currently comes from a single source.",
+            ),
+            _ => continue,
+        };
+        if seen.contains(code) {
+            continue;
+        }
+        seen.insert(code.to_string());
+        followups.push(ResearchFollowUp {
+            code: code.to_string(),
+            priority: priority.to_string(),
+            title: title.to_string(),
+            description: description.to_string(),
+            gap_code: gap.code.clone(),
+        });
+    }
+
+    // Order: HIGH, MEDIUM, LOW and within same priority stable order
+    fn priority_rank(p: &str) -> u8 {
+        match p {
+            "HIGH" => 0,
+            "MEDIUM" => 1,
+            "LOW" => 2,
+            _ => 3,
+        }
+    }
+    fn code_order(code: &str) -> u8 {
+        match code {
+            "ADD_SUPPORTING_EVIDENCE" => 0,
+            "REVIEW_CONTRADICTION" => 1,
+            "ADD_CITATION" => 2,
+            "ADD_SECOND_SUPPORTING_EVIDENCE" => 3,
+            "REVIEW_SOURCE_COVERAGE" => 4,
+            _ => 99,
+        }
+    }
+    followups.sort_by(|a, b| {
+        let pa = priority_rank(&a.priority);
+        let pb = priority_rank(&b.priority);
+        if pa != pb {
+            return pa.cmp(&pb);
+        }
+        code_order(&a.code).cmp(&code_order(&b.code))
+    });
+    followups
 }
 
 #[cfg(test)]
@@ -480,5 +581,252 @@ mod tests {
         assert!(!gaps.iter().any(|g| g.code == "SINGLE_SOURCE"));
         assert!(!gaps.iter().any(|g| g.code == "CONTRADICTORY_EVIDENCE"));
         assert!(gaps.is_empty());
+    }
+
+    // Follow-up tests
+    #[test]
+    fn test_followup_confirmed_without_support() {
+        let s = EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        assert!(fus.iter().any(|f| f.code == "ADD_SUPPORTING_EVIDENCE"));
+        let f = fus
+            .iter()
+            .find(|f| f.code == "ADD_SUPPORTING_EVIDENCE")
+            .unwrap();
+        assert_eq!(f.priority, "HIGH");
+        assert_eq!(f.title, "Add supporting evidence");
+        assert_eq!(
+            f.description,
+            "This confirmed outcome has no supporting evidence recorded."
+        );
+        assert_eq!(f.gap_code, "CONFIRMED_WITHOUT_SUPPORT");
+    }
+
+    #[test]
+    fn test_followup_no_supporting_evidence() {
+        let s = EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("INCONCLUSIVE", &s);
+        let fus = calculate_research_followups("INCONCLUSIVE", &s, &gaps);
+        let f = fus
+            .iter()
+            .find(|f| f.code == "ADD_SUPPORTING_EVIDENCE")
+            .unwrap();
+        assert_eq!(f.priority, "HIGH");
+        assert_eq!(
+            f.description,
+            "No supporting evidence is currently recorded for this outcome."
+        );
+        assert_eq!(f.gap_code, "NO_SUPPORTING_EVIDENCE");
+    }
+
+    #[test]
+    fn test_followup_no_citation() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 1,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 1,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        let f = fus.iter().find(|f| f.code == "ADD_CITATION").unwrap();
+        assert_eq!(f.priority, "MEDIUM");
+        assert_eq!(f.title, "Add a citation");
+        assert_eq!(
+            f.description,
+            "Supporting evidence is recorded without a citation."
+        );
+        assert_eq!(f.gap_code, "NO_CITATION");
+    }
+
+    #[test]
+    fn test_followup_single_supporting() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 1,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 1,
+            uncited_count: 0,
+            cited_supporting_count: 1,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        let f = fus
+            .iter()
+            .find(|f| f.code == "ADD_SECOND_SUPPORTING_EVIDENCE")
+            .unwrap();
+        assert_eq!(f.priority, "MEDIUM");
+        assert_eq!(f.title, "Add another supporting evidence");
+        assert_eq!(
+            f.description,
+            "This outcome currently has a single supporting evidence record."
+        );
+    }
+
+    #[test]
+    fn test_followup_contradictory() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 1,
+            contradicting_count: 1,
+            sources_count: 1,
+            cited_count: 1,
+            uncited_count: 1,
+            cited_supporting_count: 1,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        let f = fus
+            .iter()
+            .find(|f| f.code == "REVIEW_CONTRADICTION")
+            .unwrap();
+        assert_eq!(f.priority, "HIGH");
+        assert_eq!(f.title, "Review contradictory evidence");
+        assert_eq!(
+            f.description,
+            "Supporting and contradicting evidence are both recorded for this outcome."
+        );
+    }
+
+    #[test]
+    fn test_followup_single_source() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 2,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 2,
+            uncited_count: 0,
+            cited_supporting_count: 2,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        let f = fus
+            .iter()
+            .find(|f| f.code == "REVIEW_SOURCE_COVERAGE")
+            .unwrap();
+        assert_eq!(f.priority, "LOW");
+        assert_eq!(f.title, "Review source coverage");
+        assert_eq!(
+            f.description,
+            "Evidence for this outcome currently comes from a single source."
+        );
+    }
+
+    #[test]
+    fn test_followup_multiple_gaps_ordering() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 1,
+            contradicting_count: 1,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 2,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        // gaps: SINGLE_SUPPORTING, NO_CITATION, CONTRADICTORY, SINGLE_SOURCE
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        assert_eq!(fus.len(), 4);
+        // Order HIGH, MEDIUM, LOW
+        assert_eq!(fus[0].code, "REVIEW_CONTRADICTION"); // HIGH (ADD_SUPPORTING not present)
+        assert_eq!(fus[0].priority, "HIGH");
+        assert_eq!(fus[1].code, "ADD_CITATION"); // MEDIUM
+        assert_eq!(fus[2].code, "ADD_SECOND_SUPPORTING_EVIDENCE");
+        assert_eq!(fus[3].code, "REVIEW_SOURCE_COVERAGE"); // LOW
+    }
+
+    #[test]
+    fn test_followup_dedup() {
+        // manually craft gaps that both map to same followup
+        let s = EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        };
+        let gaps = vec![
+            EvidenceGap {
+                code: "CONFIRMED_WITHOUT_SUPPORT".into(),
+                severity: "CRITICAL".into(),
+                title: "Confirmed without support".into(),
+                description: "".into(),
+            },
+            EvidenceGap {
+                code: "NO_SUPPORTING_EVIDENCE".into(),
+                severity: "CRITICAL".into(),
+                title: "No supporting evidence".into(),
+                description: "".into(),
+            },
+        ];
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        assert_eq!(
+            fus.iter()
+                .filter(|f| f.code == "ADD_SUPPORTING_EVIDENCE")
+                .count(),
+            1
+        );
+        assert_eq!(fus.len(), 1);
+    }
+
+    #[test]
+    fn test_followup_empty() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 2,
+            contradicting_count: 0,
+            sources_count: 2,
+            cited_count: 2,
+            uncited_count: 0,
+            cited_supporting_count: 2,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps.is_empty());
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        assert!(fus.is_empty());
+    }
+
+    #[test]
+    fn test_followup_priority_ordering_full() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 0,
+            contradicting_count: 1,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 1,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        // NO_SUPPORTING? actually CONFIRMED_WITHOUT_SUPPORT + CONTRADICTORY + SINGLE_SOURCE
+        let fus = calculate_research_followups("CONFIRMED", &s, &gaps);
+        // Should be HIGH: ADD_SUPPORTING, REVIEW_CONTRADICTION then LOW
+        assert_eq!(fus[0].code, "ADD_SUPPORTING_EVIDENCE");
+        assert_eq!(fus[1].code, "REVIEW_CONTRADICTION");
+        assert_eq!(fus[2].code, "REVIEW_SOURCE_COVERAGE");
     }
 }

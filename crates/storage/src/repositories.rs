@@ -709,6 +709,96 @@ impl Storage {
                 }
             }
         }
+        // followups counts by priority
+        let mut cnt_fu_high = 0;
+        let mut cnt_fu_medium = 0;
+        let mut cnt_fu_low = 0;
+        let stats_map = self
+            .get_outcomes_evidence_stats(&outcome_ids)
+            .await
+            .unwrap_or_default();
+        // need type map for followups
+        let mut type_for_fu: std::collections::HashMap<i64, String> =
+            std::collections::HashMap::new();
+        if !outcome_ids.is_empty() {
+            let placeholders = outcome_ids
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql =
+                format!("SELECT id, type FROM research_outcomes WHERE id IN ({placeholders})");
+            let mut q = sqlx::query_as::<_, (i64, String)>(&sql);
+            for id in &outcome_ids {
+                q = q.bind(id);
+            }
+            let rows: Vec<(i64, String)> = q.fetch_all(&self.pool).await.unwrap_or_default();
+            for (id, t) in rows {
+                type_for_fu.insert(id, t);
+            }
+        }
+        for oid in &outcome_ids {
+            let gaps = gaps_map.get(oid);
+            let gaps_vec = match gaps {
+                Some(v) => v.clone(),
+                None => Vec::new(),
+            };
+            if gaps_vec.is_empty() {
+                let stats =
+                    stats_map
+                        .get(oid)
+                        .cloned()
+                        .unwrap_or(crate::assessment::EvidenceStats {
+                            evidence_total: 0,
+                            supporting_count: 0,
+                            contradicting_count: 0,
+                            sources_count: 0,
+                            cited_count: 0,
+                            uncited_count: 0,
+                            cited_supporting_count: 0,
+                        });
+                let t = type_for_fu
+                    .get(oid)
+                    .map(|s| s.as_str())
+                    .unwrap_or("INCONCLUSIVE");
+                let gaps2 = crate::assessment::calculate_evidence_gaps(t, &stats);
+                // shouldn't happen as gaps_map already has gaps, but fallback
+                for fu in crate::assessment::calculate_research_followups(t, &stats, &gaps2) {
+                    match fu.priority.as_str() {
+                        "HIGH" => cnt_fu_high += 1,
+                        "MEDIUM" => cnt_fu_medium += 1,
+                        "LOW" => cnt_fu_low += 1,
+                        _ => {}
+                    }
+                }
+            } else {
+                let stats =
+                    stats_map
+                        .get(oid)
+                        .cloned()
+                        .unwrap_or(crate::assessment::EvidenceStats {
+                            evidence_total: 0,
+                            supporting_count: 0,
+                            contradicting_count: 0,
+                            sources_count: 0,
+                            cited_count: 0,
+                            uncited_count: 0,
+                            cited_supporting_count: 0,
+                        });
+                let t = type_for_fu
+                    .get(oid)
+                    .map(|s| s.as_str())
+                    .unwrap_or("INCONCLUSIVE");
+                for fu in crate::assessment::calculate_research_followups(t, &stats, &gaps_vec) {
+                    match fu.priority.as_str() {
+                        "HIGH" => cnt_fu_high += 1,
+                        "MEDIUM" => cnt_fu_medium += 1,
+                        "LOW" => cnt_fu_low += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
@@ -716,7 +806,8 @@ impl Storage {
             "sources": { "total": sources_total },
             "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
             "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong },
-            "evidence_gaps": { "critical": cnt_gaps_critical, "warning": cnt_gaps_warning, "info": cnt_gaps_info }
+            "evidence_gaps": { "critical": cnt_gaps_critical, "warning": cnt_gaps_warning, "info": cnt_gaps_info },
+            "research_followups": { "high": cnt_fu_high, "medium": cnt_fu_medium, "low": cnt_fu_low }
         }))
     }
 
@@ -1719,6 +1810,75 @@ impl Storage {
                     ),
                 );
             }
+        }
+        Ok(res)
+    }
+
+    pub async fn get_outcome_followups(
+        &self,
+        outcome_id: i64,
+    ) -> Result<Vec<crate::assessment::ResearchFollowUp>, StorageError> {
+        let outcome = self
+            .get_research_outcome(outcome_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("outcome {outcome_id} not found")))?;
+        let stats = self.get_outcome_evidence_stats(outcome_id).await?;
+        let gaps = crate::assessment::calculate_evidence_gaps(&outcome.r#type, &stats);
+        Ok(crate::assessment::calculate_research_followups(
+            &outcome.r#type,
+            &stats,
+            &gaps,
+        ))
+    }
+
+    pub async fn get_outcomes_followups(
+        &self,
+        outcome_ids: &[i64],
+    ) -> Result<
+        std::collections::HashMap<i64, Vec<crate::assessment::ResearchFollowUp>>,
+        StorageError,
+    > {
+        if outcome_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let stats_map = self.get_outcomes_evidence_stats(outcome_ids).await?;
+        let gaps_map = self.get_outcomes_gaps(outcome_ids).await?;
+        let mut res = std::collections::HashMap::new();
+        // need types for consistency
+        let placeholders = outcome_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!("SELECT id, type FROM research_outcomes WHERE id IN ({placeholders})");
+        let mut q = sqlx::query_as::<_, (i64, String)>(&sql);
+        for id in outcome_ids {
+            q = q.bind(id);
+        }
+        let rows: Vec<(i64, String)> = q.fetch_all(&self.pool).await.unwrap_or_default();
+        let type_map: std::collections::HashMap<i64, String> = rows.into_iter().collect();
+        for id in outcome_ids {
+            let t = type_map
+                .get(id)
+                .map(|s| s.as_str())
+                .unwrap_or("INCONCLUSIVE");
+            let stats = stats_map
+                .get(id)
+                .cloned()
+                .unwrap_or(crate::assessment::EvidenceStats {
+                    evidence_total: 0,
+                    supporting_count: 0,
+                    contradicting_count: 0,
+                    sources_count: 0,
+                    cited_count: 0,
+                    uncited_count: 0,
+                    cited_supporting_count: 0,
+                });
+            let gaps = gaps_map.get(id).cloned().unwrap_or_default();
+            res.insert(
+                *id,
+                crate::assessment::calculate_research_followups(t, &stats, &gaps),
+            );
         }
         Ok(res)
     }

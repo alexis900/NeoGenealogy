@@ -82,6 +82,21 @@ async fn to_json_with_evidence(
         .get_outcome_gaps(row.id)
         .await
         .unwrap_or_default();
+    let stats = state
+        .storage
+        .get_outcome_evidence_stats(row.id)
+        .await
+        .unwrap_or(neogenealogy_storage::assessment::EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        });
+    let followups =
+        neogenealogy_storage::assessment::calculate_research_followups(&row.r#type, &stats, &gaps);
     let assessment_json = assessment.map(|a| {
         serde_json::json!({
             "score": a.score,
@@ -106,6 +121,18 @@ async fn to_json_with_evidence(
             })
         })
         .collect::<Vec<_>>();
+    let followups_json = followups
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "code": f.code,
+                "priority": f.priority,
+                "title": f.title,
+                "description": f.description,
+                "gap_code": f.gap_code
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "id": row.id,
         "tree_id": row.tree_id,
@@ -117,7 +144,8 @@ async fn to_json_with_evidence(
         "updated_at": row.updated_at,
         "evidence": evidence,
         "evidence_assessment": assessment_json,
-        "evidence_gaps": gaps_json
+        "evidence_gaps": gaps_json,
+        "research_followups": followups_json
     })
 }
 
@@ -225,6 +253,11 @@ pub async fn list_outcomes(
             .get_outcomes_gaps(&ids)
             .await
             .unwrap_or_default();
+        let stats_map = state
+            .storage
+            .get_outcomes_evidence_stats(&ids)
+            .await
+            .unwrap_or_default();
         let mut filtered: Vec<serde_json::Value> = Vec::new();
         for row in all_rows {
             // assessment filter
@@ -269,10 +302,30 @@ pub async fn list_outcomes(
             let gaps_json = gaps_map.get(&row.id).map(|v| {
                 v.iter().map(|g| serde_json::json!({"code": g.code, "severity": g.severity, "title": g.title, "description": g.description})).collect::<Vec<_>>()
             }).unwrap_or_default();
+            let gaps_for_fu = gaps_map.get(&row.id).cloned().unwrap_or_default();
+            let stats_for_fu = stats_map.get(&row.id).cloned().unwrap_or(
+                neogenealogy_storage::assessment::EvidenceStats {
+                    evidence_total: 0,
+                    supporting_count: 0,
+                    contradicting_count: 0,
+                    sources_count: 0,
+                    cited_count: 0,
+                    uncited_count: 0,
+                    cited_supporting_count: 0,
+                },
+            );
+            let row_type = row.r#type.clone();
+            let followups = neogenealogy_storage::assessment::calculate_research_followups(
+                &row_type,
+                &stats_for_fu,
+                &gaps_for_fu,
+            );
+            let followups_json = followups.iter().map(|f| serde_json::json!({"code": f.code, "priority": f.priority, "title": f.title, "description": f.description, "gap_code": f.gap_code})).collect::<Vec<_>>();
             let mut v = to_json(row);
             v["evidence"] = serde_json::json!(evidence);
             v["evidence_assessment"] = assessment_json;
             v["evidence_gaps"] = serde_json::json!(gaps_json);
+            v["research_followups"] = serde_json::json!(followups_json);
             filtered.push(v);
         }
         let total = filtered.len() as i64;
@@ -320,6 +373,11 @@ pub async fn list_outcomes(
         .get_outcomes_gaps(&ids)
         .await
         .unwrap_or_default();
+    let stats_map = state
+        .storage
+        .get_outcomes_evidence_stats(&ids)
+        .await
+        .unwrap_or_default();
     let mut items = Vec::new();
     for row in rows {
         let evidence = state
@@ -354,10 +412,30 @@ pub async fn list_outcomes(
         let gaps_json = gaps_map.get(&row.id).map(|v| {
             v.iter().map(|g| serde_json::json!({"code": g.code, "severity": g.severity, "title": g.title, "description": g.description})).collect::<Vec<_>>()
         }).unwrap_or_default();
+        let gaps_for_fu = gaps_map.get(&row.id).cloned().unwrap_or_default();
+        let stats_for_fu = stats_map.get(&row.id).cloned().unwrap_or(
+            neogenealogy_storage::assessment::EvidenceStats {
+                evidence_total: 0,
+                supporting_count: 0,
+                contradicting_count: 0,
+                sources_count: 0,
+                cited_count: 0,
+                uncited_count: 0,
+                cited_supporting_count: 0,
+            },
+        );
+        let row_type_clone = row.r#type.clone();
+        let followups = neogenealogy_storage::assessment::calculate_research_followups(
+            &row_type_clone,
+            &stats_for_fu,
+            &gaps_for_fu,
+        );
+        let followups_json = followups.iter().map(|f| serde_json::json!({"code": f.code, "priority": f.priority, "title": f.title, "description": f.description, "gap_code": f.gap_code})).collect::<Vec<_>>();
         let mut v = to_json(row);
         v["evidence"] = serde_json::json!(evidence);
         v["evidence_assessment"] = assessment_json;
         v["evidence_gaps"] = serde_json::json!(gaps_json);
+        v["research_followups"] = serde_json::json!(followups_json);
         items.push(v);
     }
     Ok(Json(Paginated {

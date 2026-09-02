@@ -131,6 +131,16 @@ export default function ResearchWorkspace(){
           </div>
         </div>
       )}
+      {summary.research_followups && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-sm font-semibold">Research Follow-ups</div>
+          <div className="text-xs text-gray-700 mt-1 space-y-0.5">
+            <div>High: <strong>{summary.research_followups.high ?? 0}</strong></div>
+            <div>Medium: <strong>{summary.research_followups.medium ?? 0}</strong></div>
+            <div>Low: <strong>{summary.research_followups.low ?? 0}</strong></div>
+          </div>
+        </div>
+      )}
     </div>}
   </div>
 }
