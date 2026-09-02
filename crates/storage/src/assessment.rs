@@ -31,6 +31,14 @@ pub struct EvidenceAssessment {
     pub reasons: Vec<AssessmentReason>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct EvidenceGap {
+    pub code: String,
+    pub severity: String,
+    pub title: String,
+    pub description: String,
+}
+
 pub fn calculate_evidence_assessment(stats: &EvidenceStats) -> EvidenceAssessment {
     let mut score: i32 = 0;
     let mut reasons: Vec<AssessmentReason> = Vec::new();
@@ -146,6 +154,74 @@ pub fn calculate_evidence_assessment(stats: &EvidenceStats) -> EvidenceAssessmen
     }
 }
 
+pub fn calculate_evidence_gaps(outcome_type: &str, stats: &EvidenceStats) -> Vec<EvidenceGap> {
+    let mut gaps = Vec::new();
+    let is_confirmed = outcome_type.eq_ignore_ascii_case("CONFIRMED");
+
+    // NO_SUPPORTING_EVIDENCE / CONFIRMED_WITHOUT_SUPPORT
+    if stats.supporting_count == 0 {
+        if is_confirmed {
+            gaps.push(EvidenceGap {
+                code: "CONFIRMED_WITHOUT_SUPPORT".into(),
+                severity: "CRITICAL".into(),
+                title: "Confirmed without support".into(),
+                description: "This confirmed outcome has no recorded supporting evidence.".into(),
+            });
+        } else {
+            gaps.push(EvidenceGap {
+                code: "NO_SUPPORTING_EVIDENCE".into(),
+                severity: "CRITICAL".into(),
+                title: "No supporting evidence".into(),
+                description: "No supporting evidence is currently recorded for this outcome."
+                    .into(),
+            });
+        }
+    }
+
+    // SINGLE_SUPPORTING_EVIDENCE
+    if stats.supporting_count == 1 {
+        gaps.push(EvidenceGap {
+            code: "SINGLE_SUPPORTING_EVIDENCE".into(),
+            severity: "WARNING".into(),
+            title: "Single supporting evidence".into(),
+            description: "This outcome currently relies on a single supporting evidence record."
+                .into(),
+        });
+    }
+
+    // NO_CITATION - only if supporting exists but none cited
+    if stats.supporting_count > 0 && stats.cited_supporting_count == 0 {
+        gaps.push(EvidenceGap {
+            code: "NO_CITATION".into(),
+            severity: "WARNING".into(),
+            title: "No citation".into(),
+            description: "Supporting evidence has no citation.".into(),
+        });
+    }
+
+    // CONTRADICTORY_EVIDENCE
+    if stats.contradicting_count > 0 {
+        gaps.push(EvidenceGap {
+            code: "CONTRADICTORY_EVIDENCE".into(),
+            severity: "WARNING".into(),
+            title: "Contradictory evidence".into(),
+            description: "Contradictory evidence is recorded for this outcome.".into(),
+        });
+    }
+
+    // SINGLE_SOURCE
+    if stats.evidence_total > 0 && stats.sources_count == 1 {
+        gaps.push(EvidenceGap {
+            code: "SINGLE_SOURCE".into(),
+            severity: "INFO".into(),
+            title: "Single source".into(),
+            description: "Evidence currently comes from a single source.".into(),
+        });
+    }
+
+    gaps
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +303,182 @@ mod tests {
         };
         let a = calculate_evidence_assessment(&s);
         assert_eq!(a.status, "MIXED");
+    }
+
+    // Gap tests
+    #[test]
+    fn test_gap_no_evidence() {
+        let s = EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("INCONCLUSIVE", &s);
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "NO_SUPPORTING_EVIDENCE" && g.severity == "CRITICAL"));
+        assert_eq!(
+            gaps.iter()
+                .find(|g| g.code == "NO_SUPPORTING_EVIDENCE")
+                .unwrap()
+                .title,
+            "No supporting evidence"
+        );
+    }
+
+    #[test]
+    fn test_gap_confirmed_without_support() {
+        let s = EvidenceStats {
+            evidence_total: 0,
+            supporting_count: 0,
+            contradicting_count: 0,
+            sources_count: 0,
+            cited_count: 0,
+            uncited_count: 0,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "CONFIRMED_WITHOUT_SUPPORT" && g.severity == "CRITICAL"));
+        assert!(!gaps.iter().any(|g| g.code == "NO_SUPPORTING_EVIDENCE"));
+    }
+
+    #[test]
+    fn test_gap_single_supporting() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 1,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 1,
+            uncited_count: 0,
+            cited_supporting_count: 1,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "SINGLE_SUPPORTING_EVIDENCE" && g.severity == "WARNING"));
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "SINGLE_SOURCE" && g.severity == "INFO"));
+        assert!(!gaps.iter().any(|g| g.code == "NO_SUPPORTING_EVIDENCE"));
+    }
+
+    #[test]
+    fn test_gap_no_citation() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 1,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 1,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "NO_CITATION" && g.severity == "WARNING"));
+        assert_eq!(
+            gaps.iter()
+                .find(|g| g.code == "NO_CITATION")
+                .unwrap()
+                .description,
+            "Supporting evidence has no citation."
+        );
+    }
+
+    #[test]
+    fn test_gap_no_citation_not_triggered_without_support() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 0,
+            contradicting_count: 1,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 1,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(!gaps.iter().any(|g| g.code == "NO_CITATION"));
+    }
+
+    #[test]
+    fn test_gap_contradictory() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 1,
+            contradicting_count: 1,
+            sources_count: 1,
+            cited_count: 1,
+            uncited_count: 1,
+            cited_supporting_count: 1,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps
+            .iter()
+            .any(|g| g.code == "CONTRADICTORY_EVIDENCE" && g.severity == "WARNING"));
+    }
+
+    #[test]
+    fn test_gap_single_source() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 2,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 2,
+            uncited_count: 0,
+            cited_supporting_count: 2,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps.iter().any(|g| g.code == "SINGLE_SOURCE"));
+        let s2 = s.clone();
+        let mut s2 = s2;
+        s2.sources_count = 2;
+        let gaps2 = calculate_evidence_gaps("CONFIRMED", &s2);
+        assert!(!gaps2.iter().any(|g| g.code == "SINGLE_SOURCE"));
+    }
+
+    #[test]
+    fn test_gap_combined() {
+        let s = EvidenceStats {
+            evidence_total: 1,
+            supporting_count: 1,
+            contradicting_count: 0,
+            sources_count: 1,
+            cited_count: 0,
+            uncited_count: 1,
+            cited_supporting_count: 0,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(gaps.iter().any(|g| g.code == "SINGLE_SUPPORTING_EVIDENCE"));
+        assert!(gaps.iter().any(|g| g.code == "NO_CITATION"));
+        assert!(gaps.iter().any(|g| g.code == "SINGLE_SOURCE"));
+        assert_eq!(gaps.len(), 3);
+    }
+
+    #[test]
+    fn test_gap_multiple_support_no_gap() {
+        let s = EvidenceStats {
+            evidence_total: 2,
+            supporting_count: 2,
+            contradicting_count: 0,
+            sources_count: 2,
+            cited_count: 2,
+            uncited_count: 0,
+            cited_supporting_count: 2,
+        };
+        let gaps = calculate_evidence_gaps("CONFIRMED", &s);
+        assert!(!gaps.iter().any(|g| g.code == "SINGLE_SUPPORTING_EVIDENCE"));
+        assert!(!gaps.iter().any(|g| g.code == "NO_CITATION"));
+        assert!(!gaps.iter().any(|g| g.code == "SINGLE_SOURCE"));
+        assert!(!gaps.iter().any(|g| g.code == "CONTRADICTORY_EVIDENCE"));
+        assert!(gaps.is_empty());
     }
 }

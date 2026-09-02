@@ -69,3 +69,25 @@ test("History filter assessment calls API", async () => {
   await screen.findByText(/No research history yet/);
   expect(api.getOutcomes).toHaveBeenCalledWith(1, expect.objectContaining({ assessment_status:"SUPPORTED"}));
 });
+
+test("History shows gaps visible", async () => {
+  const { api } = await import("../../api/client");
+  (api.getOutcomes as any).mockResolvedValueOnce({ items: [
+    { id:1, type:"CONFIRMED", summary:"Found", task_id:5, created_at:new Date().toISOString(), evidence_assessment:{status:"MIXED", score:45, evidence_total:2}, evidence_gaps:[{code:"CONTRADICTORY_EVIDENCE", severity:"WARNING", title:"Contradictory evidence", description:"..."}] }
+  ], pagination:{limit:20, offset:0, total:1}});
+  render(<MemoryRouter initialEntries={["/trees/1/research/history"]}><Routes><Route path="/trees/:treeId/research/history" element={<ResearchHistory/>} /></Routes></MemoryRouter>);
+  expect(await screen.findByText("Found")).toBeInTheDocument();
+  expect(screen.getByText(/Assessment: MIXED · 45/)).toBeInTheDocument();
+  expect(screen.getByText(/Gaps: 1 warning/)).toBeInTheDocument();
+});
+
+test("History filter gap calls API", async () => {
+  const user = userEvent.setup();
+  const { api } = await import("../../api/client");
+  render(<MemoryRouter initialEntries={["/trees/1/research/history"]}><Routes><Route path="/trees/:treeId/research/history" element={<ResearchHistory/>} /></Routes></MemoryRouter>);
+  await screen.findByText(/No research history yet/);
+  const select = screen.getByDisplayValue("All gaps");
+  await user.selectOptions(select, "CONTRADICTORY_EVIDENCE");
+  await screen.findByText(/No research history yet/);
+  expect(api.getOutcomes).toHaveBeenCalledWith(1, expect.objectContaining({ gap:"CONTRADICTORY_EVIDENCE"}));
+});

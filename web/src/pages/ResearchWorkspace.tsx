@@ -94,6 +94,7 @@ export default function ResearchWorkspace(){
               <span className="px-2 py-1 bg-emerald-100 rounded text-xs font-semibold">{formatOutcomeType(o.type)}</span>
               <span className="text-xs text-gray-600">{new Date(o.created_at).toLocaleDateString()}</span>
               {o.evidence_assessment && <span className="text-xs text-gray-600">{o.evidence_assessment.status} · {o.evidence_assessment.score}</span>}
+              {o.evidence_gaps && o.evidence_gaps.length>0 && <span className="text-xs text-amber-700">Gaps: {o.evidence_gaps.length}</span>}
             </div>
             <div className="text-sm font-medium mt-1">{o.summary}</div>
             <div className="text-xs text-gray-600">Task {o.task_id} · Person linkage via task</div>
@@ -117,6 +118,16 @@ export default function ResearchWorkspace(){
             <div>Mixed: <strong>{summary.assessment.mixed ?? 0}</strong></div>
             <div>Supported: <strong>{summary.assessment.supported ?? 0}</strong></div>
             <div>Strongly Supported: <strong>{summary.assessment.strongly_supported ?? 0}</strong></div>
+          </div>
+        </div>
+      )}
+      {summary.evidence_gaps && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-sm font-semibold">Evidence Gaps</div>
+          <div className="text-xs text-gray-700 mt-1 space-y-0.5">
+            <div>Critical: <strong>{summary.evidence_gaps.critical ?? 0}</strong></div>
+            <div>Warnings: <strong>{summary.evidence_gaps.warning ?? 0}</strong></div>
+            <div>Info: <strong>{summary.evidence_gaps.info ?? 0}</strong></div>
           </div>
         </div>
       )}

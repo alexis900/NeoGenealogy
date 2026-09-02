@@ -436,9 +436,81 @@ test("CONFIRMED + MIXED shows warning", async ()=>{
 test("CONFIRMED + SUPPORTED does not show warnings", async ()=>{
   const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
   const assessment = makeAssessment("SUPPORTED",75,{supporting_count:2,contradicting_count:0});
-  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment, evidence_gaps:[] } as any);
   renderDetail({ outcome });
   await screen.findByText(/Find parents/);
   expect(screen.queryByText(/This outcome is marked as CONFIRMED but has no recorded supporting evidence/)).not.toBeInTheDocument();
   expect(screen.queryByText(/This outcome has contradictory evidence/)).not.toBeInTheDocument();
+});
+
+test("gaps - no gaps shows empty", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("STRONGLY_SUPPORTED",90,{supporting_count:2, sources_count:2, cited_count:2, evidence_total:2});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:[] } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText("Evidence Gaps")).toBeInTheDocument();
+  expect(screen.getByText("No evidence gaps detected.")).toBeInTheDocument();
+});
+
+test("gaps - critical CONFIRMED_WITHOUT_SUPPORT", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("NO_EVIDENCE",0,{evidence_total:0,supporting_count:0,reasons:[]});
+  const gaps=[{code:"CONFIRMED_WITHOUT_SUPPORT", severity:"CRITICAL", title:"Confirmed without support", description:"This confirmed outcome has no recorded supporting evidence."}];
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:gaps } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/Confirmed without support/)).toBeInTheDocument();
+  expect(screen.getByText("This confirmed outcome has no recorded supporting evidence.")).toBeInTheDocument();
+  expect(screen.getByText("Add Evidence")).toBeInTheDocument();
+  expect(screen.getByText(/Critical evidence gap/)).toBeInTheDocument();
+});
+
+test("gaps - warning CONTRADICTORY_EVIDENCE", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("MIXED",40,{supporting_count:1, contradicting_count:1});
+  const gaps=[{code:"CONTRADICTORY_EVIDENCE", severity:"WARNING", title:"Contradictory evidence", description:"Contradictory evidence is recorded for this outcome."}];
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:gaps } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect((await screen.findAllByText(/Contradictory evidence/)).length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByText("Review Contradictions")).toBeInTheDocument();
+});
+
+test("gaps - warning NO_CITATION quick action", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"INCONCLUSIVE", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("WEAK",25,{supporting_count:1,cited_count:0});
+  const gaps=[{code:"NO_CITATION", severity:"WARNING", title:"No citation", description:"Supporting evidence has no citation."}];
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:gaps } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/No citation/)).toBeInTheDocument();
+  expect(screen.getByText("Review Evidence")).toBeInTheDocument();
+});
+
+test("gaps - info SINGLE_SOURCE", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("WEAK",25,{supporting_count:1, sources_count:1});
+  const gaps=[{code:"SINGLE_SOURCE", severity:"INFO", title:"Single source", description:"Evidence currently comes from a single source."}];
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:gaps } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/Single source/)).toBeInTheDocument();
+  expect(screen.getByText("Evidence currently comes from a single source.")).toBeInTheDocument();
+});
+
+test("gaps - multiple gaps", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("WEAK",25,{supporting_count:1});
+  const gaps=[
+    {code:"SINGLE_SUPPORTING_EVIDENCE", severity:"WARNING", title:"Single supporting evidence", description:"This outcome currently relies on a single supporting evidence record."},
+    {code:"NO_CITATION", severity:"WARNING", title:"No citation", description:"Supporting evidence has no citation."},
+    {code:"SINGLE_SOURCE", severity:"INFO", title:"Single source", description:"Evidence currently comes from a single source."},
+  ];
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment, evidence_gaps:gaps } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/Single supporting evidence/)).toBeInTheDocument();
+  expect(screen.getByText(/No citation/)).toBeInTheDocument();
+  expect(screen.getByText(/Single source/)).toBeInTheDocument();
 });

@@ -87,11 +87,18 @@ export interface EvidenceStats {
   sources_count:number; cited_count:number; uncited_count:number; cited_supporting_count:number;
 }
 
+export type GapCode = "NO_SUPPORTING_EVIDENCE" | "NO_CITATION" | "SINGLE_SUPPORTING_EVIDENCE" | "CONTRADICTORY_EVIDENCE" | "SINGLE_SOURCE" | "CONFIRMED_WITHOUT_SUPPORT";
+export type GapSeverity = "INFO" | "WARNING" | "CRITICAL";
+export interface EvidenceGap {
+  code: GapCode; severity: GapSeverity; title: string; description: string;
+}
+
 export interface ResearchOutcome {
   id:number; tree_id:number; task_id:number; type:OutcomeType; summary:string; details?:string|null;
   created_at:string; updated_at:string;
   evidence?: EvidenceWithRelationship[];
   evidence_assessment?: EvidenceAssessment | null;
+  evidence_gaps?: EvidenceGap[];
 }
 
 export type SourceType = "BOOK"|"REGISTER"|"CENSUS"|"CIVIL_RECORD"|"PARISH_RECORD"|"NEWSPAPER"|"WEBSITE"|"OTHER";

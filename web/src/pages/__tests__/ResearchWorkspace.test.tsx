@@ -45,3 +45,13 @@ test("Workspace error state", async () => {
   render(<MemoryRouter initialEntries={["/trees/1/research"]}><Routes><Route path="/trees/:treeId/research" element={<ResearchWorkspace/>} /></Routes></MemoryRouter>);
   expect(await screen.findByText(/fail/)).toBeInTheDocument();
 });
+
+test("Workspace shows gaps metrics", async () => {
+  const { api } = await import("../../api/client");
+  (api.getResearchSummary as any).mockResolvedValueOnce({ opportunities:{high:2,medium:3,low:5}, tasks:{open:1,in_progress:2,resolved:1,rejected:0,inconclusive:0}, outcomes:{total:1}, evidence:{total:5}, sources:{total:3}, assessment:{no_evidence:1,weak:2,mixed:1,supported:1,strongly_supported:0}, evidence_gaps:{critical:1,warning:2,info:3} });
+  render(<MemoryRouter initialEntries={["/trees/1/research"]}><Routes><Route path="/trees/:treeId/research" element={<ResearchWorkspace/>} /></Routes></MemoryRouter>);
+  expect(await screen.findByText("Evidence Gaps")).toBeInTheDocument();
+  expect(screen.getByText(/Critical:/)).toBeInTheDocument();
+  expect(screen.getByText(/Warnings:/)).toBeInTheDocument();
+  expect(screen.getByText(/Info:/)).toBeInTheDocument();
+});

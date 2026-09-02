@@ -13,6 +13,12 @@ function formatAssessmentStatus(s:string){
   return s.replace(/_/g," ");
 }
 
+function gapIcon(severity:string){
+  if(severity==="CRITICAL" || severity==="WARNING") return "⚠";
+  if(severity==="INFO") return "ℹ";
+  return "•";
+}
+
 export default function ResearchTaskDetail(){
   const {treeId, taskId}=useParams(); const tid=Number(treeId); const id=Number(taskId);
   const [task,setTask]=useState<any>(null); const [opp,setOpp]=useState<any>(null);
@@ -25,6 +31,7 @@ export default function ResearchTaskDetail(){
   const [outcomeSaving,setOutcomeSaving]=useState(false);
   const [evidence,setEvidence]=useState<any[]>([]);
   const [assessment,setAssessment]=useState<any>(null);
+  const [gaps,setGaps]=useState<any[]>([]);
   const [sources,setSources]=useState<any[]>([]);
   const [citations,setCitations]=useState<any[]>([]);
   const [showAddEvidence,setShowAddEvidence]=useState(false);
@@ -42,9 +49,10 @@ export default function ResearchTaskDetail(){
           const detailed=await api.getOutcome(tid,t.outcome.id);
           setEvidence(detailed.evidence||[]);
           setAssessment((detailed as any).evidence_assessment || null);
-        }catch{ setEvidence([]); setAssessment(null); }
+          setGaps((detailed as any).evidence_gaps || []);
+        }catch{ setEvidence([]); setAssessment(null); setGaps([]); }
       } else {
-        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null);
+        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]);
       }
       if(t.opportunity_id){
         try{
@@ -93,12 +101,12 @@ export default function ResearchTaskDetail(){
       try{
         const detailed=await api.getOutcome(tid, o.id);
         if((detailed as any).id===o.id){
-          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null);
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]);
         } else {
-          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null);
+          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]);
         }
       }catch{
-        setTask({...task, outcome:o}); setEvidence([]); setAssessment(null);
+        setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]);
       }
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
@@ -110,7 +118,7 @@ export default function ResearchTaskDetail(){
       try{
         const detailed=await api.getOutcome(tid,task.outcome.id);
         if((detailed as any).id===task.outcome.id){
-          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null);
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]);
         } else {
           setTask({...task, outcome:o});
         }
@@ -124,7 +132,7 @@ export default function ResearchTaskDetail(){
     if(!confirm("Delete outcome?")) return;
     try{
       await api.deleteOutcome(tid,task.outcome.id);
-      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null);
+      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]);
     }catch(e:any){setErr(e.message)}
   };
   const addEvidence=async()=>{
@@ -137,6 +145,7 @@ export default function ResearchTaskDetail(){
       const detailed=await api.getOutcome(tid, task.outcome.id);
       setEvidence(detailed.evidence||[]);
       setAssessment((detailed as any).evidence_assessment||null);
+      setGaps((detailed as any).evidence_gaps||[]);
       setEvStatement(""); setEvNotes(""); setEvCitationId(""); setEvSourceId(""); setShowAddEvidence(false);
     }catch(e:any){setErr(e.message)} finally{setEvSaving(false)}
   };
@@ -148,6 +157,7 @@ export default function ResearchTaskDetail(){
       const detailed=await api.getOutcome(tid, task.outcome.id);
       setEvidence(detailed.evidence||[]);
       setAssessment((detailed as any).evidence_assessment||null);
+      setGaps((detailed as any).evidence_gaps||[]);
     }catch(e:any){setErr(e.message)}
   };
 
@@ -230,7 +240,39 @@ export default function ResearchTaskDetail(){
             </div>
           )}
 
-          <div className="border rounded p-3 bg-gray-50">
+          {/* Evidence Gaps */}
+          <div className="border rounded p-3 bg-gray-50 space-y-2">
+            <div className="text-sm font-semibold">Evidence Gaps</div>
+            {gaps.length===0 ? (
+              <div className="text-sm text-gray-600">No evidence gaps detected.</div>
+            ) : (
+              <div className="space-y-2">
+                {gaps.map((g:any)=>(
+                  <div key={g.code} className={`rounded px-3 py-2 text-sm ${g.severity==="CRITICAL"?"bg-red-50 border border-red-200 text-red-800": g.severity==="WARNING"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-blue-50 border border-blue-200 text-blue-800"}`}>
+                    <div className="font-semibold">{gapIcon(g.severity)} {g.title}</div>
+                    <div className="text-xs mt-0.5">{g.description}</div>
+                  </div>
+                ))}
+                {/* Quick actions */}
+                <div className="flex gap-2 flex-wrap mt-2">
+                  {(gaps.some((g:any)=>g.code==="NO_SUPPORTING_EVIDENCE"||g.code==="CONFIRMED_WITHOUT_SUPPORT")) && (
+                    <button onClick={()=>setShowAddEvidence(true)} className="text-xs px-2 py-1 bg-emerald-600 text-white rounded">Add Evidence</button>
+                  )}
+                  {(gaps.some((g:any)=>g.code==="NO_CITATION")) && (
+                    <button onClick={()=>setShowAddEvidence(true)} className="text-xs px-2 py-1 bg-blue-600 text-white rounded">Review Evidence</button>
+                  )}
+                  {(gaps.some((g:any)=>g.code==="CONTRADICTORY_EVIDENCE")) && (
+                    <button onClick={()=>{const el=document.getElementById("evidence-section"); el?.scrollIntoView({behavior:"smooth"});}} className="text-xs px-2 py-1 border rounded bg-white">Review Contradictions</button>
+                  )}
+                </div>
+              </div>
+            )}
+            {gaps.some((g:any)=>g.severity==="CRITICAL") && (
+              <div className="text-xs text-red-700 mt-1">⚠ Critical evidence gap</div>
+            )}
+          </div>
+
+          <div id="evidence-section" className="border rounded p-3 bg-gray-50">
             <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Evidence</h4><span className="text-xs text-gray-600">{evidence.length} attached</span></div>
             {evidence.length===0 ? <div className="text-sm text-gray-500">No evidence attached yet.</div> :
               <div className="space-y-2">{evidence.map((ev:any)=><div key={ev.id} className="border rounded p-3 bg-white">

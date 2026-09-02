@@ -181,6 +181,24 @@ GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,e
 
 Ver `docs/EVIDENCE_ASSESSMENT.md` para propósito ("¿Qué tan respaldada está esta conclusión?" vs "¿Es verdadera?") y diferencia Research Score vs Evidence Score.
 
+## Evidence Gaps — Fase 4.2
+
+```
+GET /api/v1/trees/1/research-outcomes/5 → {evidence:[], evidence_assessment:{...}, evidence_gaps:[{code,severity,title,description}]}
+GET /api/v1/trees/1/research-outcomes?gap=CONTRADICTORY_EVIDENCE&limit=20 → {items:[{evidence,evidence_assessment,evidence_gaps}], pagination}
+GET /api/v1/trees/1/research-outcomes?assessment_status=MIXED&gap=SINGLE_SOURCE → combinado
+GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,evidence,assessment,evidence_gaps:{critical,warning,info}}
+```
+
+- `EvidenceGap.code` ∈ NO_SUPPORTING_EVIDENCE,NO_CITATION,SINGLE_SUPPORTING_EVIDENCE,CONTRADICTORY_EVIDENCE,SINGLE_SOURCE,CONFIRMED_WITHOUT_SUPPORT — ver `docs/EVIDENCE_GAPS.md`.
+- `severity` ∈ INFO,WARNING,CRITICAL (CRITICAL: sin supporting, WARNING: contradicción / sin citation / single supporting, INFO: single source).
+- `calculate_evidence_gaps(outcome_type, stats)` puro, sin persistencia; `CONFIRMED_WITHOUT_SUPPORT` reemplaza `NO_SUPPORTING_EVIDENCE` si CONFIRMED.
+- `gap` filtra server-side sin N+1 (batch `GROUP BY` + gaps, 400 `INVALID_GAP_CODE` si inválido); combinable con `assessment_status`.
+- `GET /research-outcomes` y `GET /research-outcomes/:id` coinciden con JSON real (`evidence_gaps` incluido, `[]` si ninguno).
+- OpenAPI documenta `EvidenceGap`, `EvidenceGapSeverity`, `EvidenceGapCode`, `gap`.
+
+Ver `docs/EVIDENCE_GAPS.md` para `Assessment vs Gaps` y ejemplos.
+
 ## Errores
 
 ```json

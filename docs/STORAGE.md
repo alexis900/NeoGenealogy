@@ -121,10 +121,10 @@ create_research_task, get_research_task, list_research_tasks, update_research_ta
 create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome,
 create_research_source, get_research_source, list_research_sources, update_research_source, delete_research_source,
 create_research_citation, get_research_citation, list_research_citations, update_research_citation, delete_research_citation,
-create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
- attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
- get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment`),
- research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported})
+ create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
+  attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
+  get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments, get_outcome_gaps, get_outcomes_gaps (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment` / `calculate_evidence_gaps`),
+  research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info})
 ```
 
 Paginación: `limit/offset` en listados para preparar futura API HTTP sin rediseñar acceso a datos.

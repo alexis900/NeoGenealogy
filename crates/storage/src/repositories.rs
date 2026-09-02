@@ -691,13 +691,32 @@ impl Storage {
         }
         // outcomes with no evidence not in map are NO_EVIDENCE (already counted via batch fills)
         // but batch fills missing with NO_EVIDENCE, so counts are correct
+        // gaps counts by severity
+        let gaps_map = self
+            .get_outcomes_gaps(&outcome_ids)
+            .await
+            .unwrap_or_default();
+        let mut cnt_gaps_critical = 0;
+        let mut cnt_gaps_warning = 0;
+        let mut cnt_gaps_info = 0;
+        for gaps in gaps_map.values() {
+            for g in gaps {
+                match g.severity.as_str() {
+                    "CRITICAL" => cnt_gaps_critical += 1,
+                    "WARNING" => cnt_gaps_warning += 1,
+                    "INFO" => cnt_gaps_info += 1,
+                    _ => {}
+                }
+            }
+        }
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
             "outcomes": { "total": outcomes_total },
             "sources": { "total": sources_total },
             "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
-            "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong }
+            "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong },
+            "evidence_gaps": { "critical": cnt_gaps_critical, "warning": cnt_gaps_warning, "info": cnt_gaps_info }
         }))
     }
 
@@ -1634,6 +1653,72 @@ impl Storage {
         let mut res = std::collections::HashMap::new();
         for (id, stats) in stats_map {
             res.insert(id, crate::assessment::calculate_evidence_assessment(&stats));
+        }
+        Ok(res)
+    }
+
+    pub async fn get_outcome_gaps(
+        &self,
+        outcome_id: i64,
+    ) -> Result<Vec<crate::assessment::EvidenceGap>, StorageError> {
+        let outcome = self
+            .get_research_outcome(outcome_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("outcome {outcome_id} not found")))?;
+        let stats = self.get_outcome_evidence_stats(outcome_id).await?;
+        Ok(crate::assessment::calculate_evidence_gaps(
+            &outcome.r#type,
+            &stats,
+        ))
+    }
+
+    pub async fn get_outcomes_gaps(
+        &self,
+        outcome_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, Vec<crate::assessment::EvidenceGap>>, StorageError>
+    {
+        if outcome_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let stats_map = self.get_outcomes_evidence_stats(outcome_ids).await?;
+        // need outcome types
+        let placeholders = outcome_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!("SELECT id, type FROM research_outcomes WHERE id IN ({placeholders})");
+        let mut q = sqlx::query_as::<_, (i64, String)>(&sql);
+        for id in outcome_ids {
+            q = q.bind(id);
+        }
+        let rows: Vec<(i64, String)> = q.fetch_all(&self.pool).await.unwrap_or_default();
+        let type_map: std::collections::HashMap<i64, String> = rows.into_iter().collect();
+        let mut res = std::collections::HashMap::new();
+        for id in outcome_ids {
+            let t = type_map
+                .get(id)
+                .map(|s| s.as_str())
+                .unwrap_or("INCONCLUSIVE");
+            if let Some(stats) = stats_map.get(id) {
+                res.insert(*id, crate::assessment::calculate_evidence_gaps(t, stats));
+            } else {
+                res.insert(
+                    *id,
+                    crate::assessment::calculate_evidence_gaps(
+                        t,
+                        &crate::assessment::EvidenceStats {
+                            evidence_total: 0,
+                            supporting_count: 0,
+                            contradicting_count: 0,
+                            sources_count: 0,
+                            cited_count: 0,
+                            uncited_count: 0,
+                            cited_supporting_count: 0,
+                        },
+                    ),
+                );
+            }
         }
         Ok(res)
     }

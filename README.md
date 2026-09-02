@@ -1,12 +1,14 @@
-# NeoGenealogy v0.4.1 — Evidence Assessment
+# NeoGenealogy v0.4.2 — Evidence Gaps
 
-Herramienta local de análisis genealógico. Release v0.4.1 cierra Research Evidence Assessment (`Outcome → Evidence → Assessment` explicable). Fase 4.0 añadía Evidence & Sources (`Source → Citation → Evidence → Outcome`).
+Herramienta local de análisis genealógico. Release v0.4.2 añade Research Evidence Gaps (`Outcome → Evidence → Assessment → Gaps`). Fase 4.1 cerraba Evidence Assessment explicable.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
 WHAT THE USER DECIDED TO INVESTIGATE → Research Task (OPEN → RESOLVED/…)
 WHAT THE USER DISCOVERED     → Research Outcome (CONFIRMED/…)
 WHAT SUPPORTS THAT CONCLUSION → Evidence (SUPPORTS/CONTRADICTS) → Source + Citation
+HOW WELL IT IS SUPPORTED     → Evidence Assessment (score/status/reasons)
+WHAT IS MISSING              → Evidence Gaps (CRITICAL/WARNING/INFO)
 ```
 
 ```
@@ -53,7 +55,7 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
 - `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome integration)
 
-Véase `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+Véase `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -68,8 +70,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Evidence), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence), `/trees/:treeId/persons/:personId`, `/trees/:treeId/findings`, `/trees/:treeId/branches`, `/trees/:treeId/coverage`.
-Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Source/Citation` — ver `docs/EVIDENCE_SOURCES.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Evidence), `/trees/:treeId/research/history` (filtros assessment/gap), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps` — ver `docs/EVIDENCE_GAPS.md`.
 
 ## API REST
 

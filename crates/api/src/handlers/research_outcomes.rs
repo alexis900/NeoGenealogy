@@ -17,6 +17,7 @@ pub struct OutcomeListParams {
     pub task_id: Option<i64>,
     pub person_id: Option<i64>,
     pub assessment_status: Option<String>,
+    pub gap: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -76,6 +77,11 @@ async fn to_json_with_evidence(
         .await
         .unwrap_or_default();
     let assessment = state.storage.get_outcome_assessment(row.id).await.ok();
+    let gaps = state
+        .storage
+        .get_outcome_gaps(row.id)
+        .await
+        .unwrap_or_default();
     let assessment_json = assessment.map(|a| {
         serde_json::json!({
             "score": a.score,
@@ -89,6 +95,17 @@ async fn to_json_with_evidence(
             "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
         })
     }).unwrap_or(serde_json::json!(null));
+    let gaps_json = gaps
+        .iter()
+        .map(|g| {
+            serde_json::json!({
+                "code": g.code,
+                "severity": g.severity,
+                "title": g.title,
+                "description": g.description
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "id": row.id,
         "tree_id": row.tree_id,
@@ -99,7 +116,8 @@ async fn to_json_with_evidence(
         "created_at": row.created_at,
         "updated_at": row.updated_at,
         "evidence": evidence,
-        "evidence_assessment": assessment_json
+        "evidence_assessment": assessment_json,
+        "evidence_gaps": gaps_json
     })
 }
 
@@ -115,6 +133,24 @@ fn validate_assessment_status(s: &str) -> Result<(), ApiError> {
         return Err(ApiError::bad_request(
             "INVALID_ASSESSMENT_STATUS",
             format!("assessment_status must be one of {}", allowed.join(",")),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_gap(s: &str) -> Result<(), ApiError> {
+    let allowed = [
+        "NO_SUPPORTING_EVIDENCE",
+        "NO_CITATION",
+        "SINGLE_SUPPORTING_EVIDENCE",
+        "CONTRADICTORY_EVIDENCE",
+        "SINGLE_SOURCE",
+        "CONFIRMED_WITHOUT_SUPPORT",
+    ];
+    if !allowed.contains(&s) {
+        return Err(ApiError::bad_request(
+            "INVALID_GAP_CODE",
+            format!("gap must be one of {}", allowed.join(",")),
         ));
     }
     Ok(())
@@ -140,6 +176,9 @@ pub async fn list_outcomes(
     if let Some(ref a) = params.assessment_status {
         validate_assessment_status(&a.to_uppercase())?;
     }
+    if let Some(ref g) = params.gap {
+        validate_gap(&g.to_uppercase())?;
+    }
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
     if !(0..=100).contains(&limit) {
@@ -153,9 +192,10 @@ pub async fn list_outcomes(
         .assessment_status
         .as_deref()
         .map(|s| s.to_uppercase());
+    let gap_filter = params.gap.as_deref().map(|s| s.to_uppercase());
 
-    // If assessment filter present, need to fetch all and filter in Rust to avoid N+1, then paginate
-    if let Some(ref filter_status) = assessment_filter {
+    // If assessment or gap filter present, need to fetch all and filter in Rust to avoid N+1, then paginate
+    if assessment_filter.is_some() || gap_filter.is_some() {
         // fetch all matching other filters (without pagination)
         let (all_rows, _) = if params.person_id.is_some() {
             state
@@ -180,37 +220,60 @@ pub async fn list_outcomes(
             .get_outcomes_assessments(&ids)
             .await
             .unwrap_or_default();
+        let gaps_map = state
+            .storage
+            .get_outcomes_gaps(&ids)
+            .await
+            .unwrap_or_default();
         let mut filtered: Vec<serde_json::Value> = Vec::new();
         for row in all_rows {
-            let assessment = assessments.get(&row.id);
-            let status = assessment
-                .map(|a| a.status.as_str())
-                .unwrap_or("NO_EVIDENCE");
-            if status == filter_status.as_str() {
-                // enrich with assessment and evidence
-                let evidence = state
-                    .storage
-                    .list_outcome_evidence_detailed(row.id)
-                    .await
-                    .unwrap_or_default();
-                let assessment_json = assessments.get(&row.id).map(|a| {
-                    serde_json::json!({
-                        "score": a.score,
-                        "status": a.status,
-                        "evidence_total": a.evidence_total,
-                        "supporting_count": a.supporting_count,
-                        "contradicting_count": a.contradicting_count,
-                        "sources_count": a.sources_count,
-                        "cited_count": a.cited_count,
-                        "uncited_count": a.uncited_count,
-                        "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
-                    })
-                }).unwrap_or(serde_json::json!(null));
-                let mut v = to_json(row);
-                v["evidence"] = serde_json::json!(evidence);
-                v["evidence_assessment"] = assessment_json;
-                filtered.push(v);
+            // assessment filter
+            if let Some(ref filter_status) = assessment_filter {
+                let status = assessments
+                    .get(&row.id)
+                    .map(|a| a.status.as_str())
+                    .unwrap_or("NO_EVIDENCE");
+                if status != filter_status.as_str() {
+                    continue;
+                }
             }
+            // gap filter
+            if let Some(ref filter_gap) = gap_filter {
+                let gaps = gaps_map.get(&row.id);
+                let has_gap = gaps
+                    .map(|v| v.iter().any(|g| g.code == filter_gap.as_str()))
+                    .unwrap_or(false);
+                if !has_gap {
+                    continue;
+                }
+            }
+            // enrich with assessment, evidence and gaps
+            let evidence = state
+                .storage
+                .list_outcome_evidence_detailed(row.id)
+                .await
+                .unwrap_or_default();
+            let assessment_json = assessments.get(&row.id).map(|a| {
+                serde_json::json!({
+                    "score": a.score,
+                    "status": a.status,
+                    "evidence_total": a.evidence_total,
+                    "supporting_count": a.supporting_count,
+                    "contradicting_count": a.contradicting_count,
+                    "sources_count": a.sources_count,
+                    "cited_count": a.cited_count,
+                    "uncited_count": a.uncited_count,
+                    "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
+                })
+            }).unwrap_or(serde_json::json!(null));
+            let gaps_json = gaps_map.get(&row.id).map(|v| {
+                v.iter().map(|g| serde_json::json!({"code": g.code, "severity": g.severity, "title": g.title, "description": g.description})).collect::<Vec<_>>()
+            }).unwrap_or_default();
+            let mut v = to_json(row);
+            v["evidence"] = serde_json::json!(evidence);
+            v["evidence_assessment"] = assessment_json;
+            v["evidence_gaps"] = serde_json::json!(gaps_json);
+            filtered.push(v);
         }
         let total = filtered.len() as i64;
         let paginated: Vec<serde_json::Value> = filtered
@@ -245,11 +308,16 @@ pub async fn list_outcomes(
             .list_research_outcomes(tree_id, ttype.as_deref(), params.task_id, limit, offset)
             .await?
     };
-    // batch assessment for listed rows
+    // batch assessment + gaps for listed rows
     let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let assessments = state
         .storage
         .get_outcomes_assessments(&ids)
+        .await
+        .unwrap_or_default();
+    let gaps_map = state
+        .storage
+        .get_outcomes_gaps(&ids)
         .await
         .unwrap_or_default();
     let mut items = Vec::new();
@@ -283,9 +351,13 @@ pub async fn list_outcomes(
             "uncited_count": 0,
             "reasons": []
         }));
+        let gaps_json = gaps_map.get(&row.id).map(|v| {
+            v.iter().map(|g| serde_json::json!({"code": g.code, "severity": g.severity, "title": g.title, "description": g.description})).collect::<Vec<_>>()
+        }).unwrap_or_default();
         let mut v = to_json(row);
         v["evidence"] = serde_json::json!(evidence);
         v["evidence_assessment"] = assessment_json;
+        v["evidence_gaps"] = serde_json::json!(gaps_json);
         items.push(v);
     }
     Ok(Json(Paginated {
