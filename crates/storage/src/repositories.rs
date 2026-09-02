@@ -2302,4 +2302,100 @@ impl Storage {
             closure_warnings: warnings,
         })
     }
+
+    pub async fn get_research_planning_candidates(
+        &self,
+        tree_id: i64,
+    ) -> Result<Vec<crate::planning::PlanningCandidate>, StorageError> {
+        // 1 query: all opportunities for tree (O(1))
+        let opps = sqlx::query_as::<_, ResearchOpportunityRow>(
+            "SELECT * FROM research_opportunities WHERE tree_id=?1 ORDER BY id",
+        )
+        .bind(tree_id)
+        .fetch_all(&self.pool)
+        .await?;
+        if opps.is_empty() {
+            return Ok(Vec::new());
+        }
+        let opp_ids: Vec<i64> = opps.iter().map(|o| o.id).collect();
+
+        // 2 query: all tasks for those opportunities in this tree (single query, no N+1)
+        // Pick latest task per opportunity (max id)
+        let placeholders = opp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT * FROM research_tasks WHERE tree_id=? AND opportunity_id IN ({placeholders}) ORDER BY id DESC"
+        );
+        let mut q = sqlx::query_as::<_, ResearchTaskRow>(&sql).bind(tree_id);
+        for oid in &opp_ids {
+            q = q.bind(oid);
+        }
+        let tasks = q.fetch_all(&self.pool).await?;
+        use std::collections::HashMap;
+        let mut opp_to_task: HashMap<i64, ResearchTaskRow> = HashMap::new();
+        for t in tasks {
+            if let Some(oid) = t.opportunity_id {
+                opp_to_task.entry(oid).or_insert(t);
+            }
+        }
+        let task_ids: Vec<i64> = opp_to_task.values().map(|t| t.id).collect();
+
+        // 3 query: outcomes for those tasks (single query)
+        let mut task_to_outcome: HashMap<i64, ResearchOutcomeRow> = HashMap::new();
+        let mut outcome_ids: Vec<i64> = Vec::new();
+        if !task_ids.is_empty() {
+            let placeholders2 = task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql2 = format!(
+                "SELECT * FROM research_outcomes WHERE tree_id=? AND task_id IN ({placeholders2})"
+            );
+            let mut q2 = sqlx::query_as::<_, ResearchOutcomeRow>(&sql2).bind(tree_id);
+            for tid in &task_ids {
+                q2 = q2.bind(tid);
+            }
+            let outcomes = q2.fetch_all(&self.pool).await?;
+            for o in outcomes {
+                outcome_ids.push(o.id);
+                task_to_outcome.insert(o.task_id, o);
+            }
+        }
+
+        // 4: gaps for outcomes (batch, O(1) – uses 2 queries internally but not N)
+        let gaps_map = if outcome_ids.is_empty() {
+            HashMap::new()
+        } else {
+            self.get_outcomes_gaps(&outcome_ids).await?
+        };
+
+        // Build candidates
+        let mut candidates = Vec::with_capacity(opps.len());
+        for opp in opps {
+            let title = opp
+                .why
+                .clone()
+                .or_else(|| opp.what.clone())
+                .unwrap_or_else(|| format!("Research opportunity {}", opp.id));
+            // Trim JSON if what is JSON string – but why is plain string, use it
+            let gaps = if let Some(task) = opp_to_task.get(&opp.id) {
+                if let Some(outcome) = task_to_outcome.get(&task.id) {
+                    gaps_map.get(&outcome.id).cloned().unwrap_or_default()
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            };
+            let task_status = opp_to_task.get(&opp.id).map(|t| t.status.clone());
+            candidates.push(crate::planning::PlanningCandidate {
+                opportunity_id: opp.id,
+                person_id: opp.person_id,
+                title,
+                priority: opp.priority.clone().unwrap_or_else(|| "low".to_string()),
+                research_score: opp.score.unwrap_or(0),
+                researchability: opp.researchability.clone(),
+                confidence: opp.confidence,
+                task_status,
+                gaps,
+            });
+        }
+        Ok(candidates)
+    }
 }

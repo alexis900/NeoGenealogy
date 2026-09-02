@@ -39,6 +39,7 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-followup-actions/{action_id}": { "get": { "summary": "Get followup action" }, "patch": { "summary": "Update followup action" }, "delete": { "summary": "Delete followup action" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/followup-actions": { "get": { "summary": "List followup actions for task" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/case-summary": { "get": { "summary": "Get research case summary", "description": "Derived view: task + person + opportunity + outcome + evidence_assessment + evidence_gaps + research_followups + followup_actions + timeline + closure_warnings. 404 only if TASK_NOT_FOUND. No persistent CaseStatus." } },
+            "/api/v1/trees/{tree_id}/research/plan": { "get": { "summary": "Get research plan", "description": "Deterministic planning: research_score*0.55 + researchability*0.20 + confidence*0.10 + evidence_gap*0.10 + task_state*0.05. No persistence. Sorted planning_score DESC, research_score DESC, confidence DESC, opportunity_id ASC. Returns recommended (top 10 by default, limit param) and deferred. Query params: limit 1..100 default 10, min_score 0..100, priority, researchability.", "parameters": [{"name":"limit","description":"Recommended size, default 10 max 100"},{"name":"min_score","description":"Minimum planning_score 0..100"},{"name":"priority","description":"Filter by priority: low,info,medium,warning,high,critical"},{"name":"researchability","description":"Filter by researchability: low,medium,high"}] } },
         },
         "components": {
             "schemas": {
@@ -164,6 +165,53 @@ pub async fn get_openapi() -> Json<Value> {
                         "followup_actions": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowupAction" } },
                         "timeline": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchCaseTimelineEvent" } },
                         "closure_warnings": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchCaseClosureWarning" } }
+                    }
+                },
+                "ResearchPlanningReasonCode": { "type": "string", "enum": ["HIGH_RESEARCH_SCORE","HIGH_RESEARCHABILITY","HIGH_CONFIDENCE","CRITICAL_EVIDENCE_GAP","WARNING_EVIDENCE_GAP","INFO_EVIDENCE_GAP","NO_ACTIVE_TASK","ACTIVE_TASK","PREVIOUSLY_INCONCLUSIVE"] },
+                "ResearchPlanningReason": {
+                    "type": "object",
+                    "properties": {
+                        "code": { "$ref": "#/components/schemas/ResearchPlanningReasonCode" },
+                        "label": { "type": "string" },
+                        "description": { "type": "string" }
+                    }
+                },
+                "ResearchPlanItem": {
+                    "type": "object",
+                    "properties": {
+                        "opportunity_id": { "type": "integer" },
+                        "person_id": { "type": "integer" },
+                        "title": { "type": "string" },
+                        "priority": { "type": "string", "enum": ["LOW","MEDIUM","HIGH","CRITICAL","INFO","WARNING"] },
+                        "research_score": { "type": "integer" },
+                        "planning_score": { "type": "number", "minimum": 0, "maximum": 100 },
+                        "researchability": { "type": "string", "enum": ["LOW","MEDIUM","HIGH"] },
+                        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+                        "active_task": { "type": "boolean" },
+                        "task_status": { "type": "string", "nullable": true, "enum": ["OPEN","IN_PROGRESS","INCONCLUSIVE"] },
+                        "reasons": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchPlanningReason" } }
+                    }
+                },
+                "ResearchPlanSummary": {
+                    "type": "object",
+                    "properties": {
+                        "total_candidates": { "type": "integer" },
+                        "recommended_count": { "type": "integer" },
+                        "deferred_count": { "type": "integer" },
+                        "active_count": { "type": "integer" },
+                        "inconclusive_count": { "type": "integer" },
+                        "high_priority_count": { "type": "integer" },
+                        "critical_gap_count": { "type": "integer" }
+                    }
+                },
+                "ResearchPlan": {
+                    "type": "object",
+                    "properties": {
+                        "generated_at": { "type": "string", "format": "date-time" },
+                        "total_candidates": { "type": "integer" },
+                        "summary": { "$ref": "#/components/schemas/ResearchPlanSummary" },
+                        "recommended": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchPlanItem" } },
+                        "deferred": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchPlanItem" } }
                     }
                 }
             }

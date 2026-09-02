@@ -47,7 +47,7 @@ getSources({type}), getSource, createSource, updateSource, deleteSource,
 getCitations, getCitation, createCitation, updateCitation, deleteCitation,
 getEvidenceList, getEvidence, createEvidence, updateEvidence, deleteEvidence,
   getOutcomeEvidence, attachEvidence, detachEvidence,
-getResearchSummary, getCaseSummary
+getResearchSummary, getCaseSummary, getPlan({limit,min_score,priority,researchability})
 ```
 
 No hay `fetch()` disperso.
@@ -56,7 +56,7 @@ No hay `fetch()` disperso.
 
 `web/src/api/types.ts` refleja exactamente DTOs de `docs/API.md`:
 
-`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome,has_outcome,opportunity}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at,evidence,evidence_assessment,evidence_gaps,research_followups}, OutcomeType, AssessmentStatus, EvidenceAssessment {score,status,evidence_total,supporting_count,contradicting_count,sources_count,cited_count,uncited_count,cited_supporting_count,reasons}, EvidenceAssessmentReason, EvidenceGap {code,severity,title,description}, GapCode, GapSeverity, ResearchFollowUp {code,priority,title,description,gap_code}, FollowUpCode, FollowUpPriority, ResearchSource, ResearchCitation, Evidence, EvidenceWithRelationship, ResearchCaseSummary {task,person,opportunity,outcome,evidence_assessment,evidence_gaps,research_followups,followup_actions,timeline,closure_warnings}, ResearchCaseTimelineEvent, ResearchCaseClosureWarning, ClosureWarningCode, ClosureWarningSeverity, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
+`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome,has_outcome,opportunity}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at,evidence,evidence_assessment,evidence_gaps,research_followups}, OutcomeType, AssessmentStatus, EvidenceAssessment {score,status,evidence_total,supporting_count,contradicting_count,sources_count,cited_count,uncited_count,cited_supporting_count,reasons}, EvidenceAssessmentReason, EvidenceGap {code,severity,title,description}, GapCode, GapSeverity, ResearchFollowUp {code,priority,title,description,gap_code}, FollowUpCode, FollowUpPriority, ResearchSource, ResearchCitation, Evidence, EvidenceWithRelationship, ResearchCaseSummary {task,person,opportunity,outcome,evidence_assessment,evidence_gaps,research_followups,followup_actions,timeline,closure_warnings}, ResearchCaseTimelineEvent, ResearchCaseClosureWarning, ClosureWarningCode, ClosureWarningSeverity, ResearchPlanningReason, ResearchPlanItem, ResearchPlanSummary, ResearchPlan, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
 
 No recalcula score/confidence.
 
@@ -67,6 +67,7 @@ No recalcula score/confidence.
  /trees         → Trees
  /trees/:treeId → Dashboard (overview + top 5 + Research Tasks summary)
  /trees/:treeId/research → Research Workspace (Overview: Opportunities/Active Tasks/Recent Outcomes + evidence/sources metrics)
+ /trees/:treeId/research/planning → Research Planning (What should I research next? Recommended/Deferred + Why is this here? + filtros priority/researchability/min_score + Start Research)
  /trees/:treeId/research/opportunities → Research Queue (filtros priority/min_score/sort)
  /trees/:treeId/research/tasks → Research Tasks (filtros status/has_outcome/person/opportunity, paginación, has_outcome badge)
  /trees/:treeId/research/tasks/:taskId → Research Task Detail (workflow actions + Outcome + Evidence SUPPORTS/CONTRADICTS)
@@ -90,7 +91,8 @@ Layout `web/src/components/Layout.tsx` con sidebar. TreeId se propaga por URL, n
 - **Dashboard**: `getTree` + `getTop(limit=5)` + `getTasks(limit=100)` → overview + Research Tasks summary (Open/In Progress/Resolved) + `Ver toda la cola →`
 - **Research Queue**: `getResearchOpportunities` con filtros `Priority, Sort(score/priority/confidence), min_score` → `ResearchOpportunityCard`; distinción `Research Queue` (automático) vs `Research Tasks` (humano).
 - **Opportunity Detail**: `ScoreBreakdown` + `Start Research` (`POST /research-opportunities/:id/tasks`) o `View Research Task` si ya existe.
-- **Research Workspace**: `getResearchSummary` + `getTasks(limit 5)` + `getOutcomes(limit 5)` → 3 bloques Opportunities (high/medium/low) + Active Tasks (OPEN/IN_PROGRESS) + Recent Outcomes (con gaps) + métricas `Evidence/Sources` + `Evidence Assessment` + `Evidence Gaps` + `Research Follow-ups` + `Follow-up Actions` (Open/Completed/Skipped desde mismo summary, sin queries extra).
+- **Research Workspace**: `getResearchSummary` + `getTasks(limit 5)` + `getOutcomes(limit 5)` → 3 bloques Opportunities (high/medium/low) + Active Tasks (OPEN/IN_PROGRESS) + Recent Outcomes (con gaps) + métricas `Evidence/Sources` + `Evidence Assessment` + `Evidence Gaps` + `Research Follow-ups` + `Follow-up Actions` (Open/Completed/Skipped desde mismo summary, sin queries extra). Nav incluye `Planning`.
+- **Research Planning**: `getPlan({limit,min_score,priority,researchability})` → header `recommended/total + deferred`, lista `Recommended` con `Research Score` (primario) + `Planning Score` (secundario, mono) + `Why is this here?` (reasons del backend, no recálculo TS) + acciones `View Opportunity / Start Research / View Research Task`; filtros `Priority, Researchability, Min Planning Score, Limit`; `Research Score = importancia` vs `Planning Score = prioridad práctica`.
 - **Research Tasks**: `getTasks` con filtros `status/has_outcome/person_id/opportunity_id` combinables, orden `IN_PROGRESS>OPEN>updated_at`, cards con `has_outcome` y `opportunity{score,priority}`.
 - **ResearchTask Detail**: `getTask`/`updateTask`/`deleteTask` + workflow `Start/Mark Resolved/Rejected/Inconclusive`; sección `Research Outcome` + `Evidence Assessment` (status/score/counts, `Why this assessment?`, warnings) + `Evidence Gaps` (CRITICAL/WARNING/INFO, títulos/descripciones, quick actions `Add Evidence`/`Review Evidence`/`Review Contradictions`, empty `No evidence gaps detected.`) + `Research Follow-ups` (HIGH/MEDIUM/LOW, `Start follow-up`/`Add Evidence`/`Review Evidence`, oculto si `[]`, muestra `Gap: CODE`) + `Research Follow-up Actions` (lista `updated_at DESC` con `followup_code`, `Status OPEN/COMPLETED/SKIPPED`, `Notes`, botones `Mark completed`/`Skip`/`Reopen`/`Delete`, `✓ Completed — Action completed, not gap resolved`) + `Evidence` (SUPPORTS/CONTRADICTS) + `Research Case Summary` (Status/Resolution/Outcome/Evidence/Assessment/Gaps/Follow-ups/Actions + `Closure Warnings` CRITICAL/WARNING/INFO + `Timeline` ordenada + `Case Closure` cuando terminal) + `Original Research Opportunity`.
 - **Research History**: `getOutcomes(limit 20, assessment_status, gap)` → tabla Date/Type/Summary/Task + `Evidence: N` + `Assessment: STATUS · score` + `Gaps: 1 warning` + `Follow-ups: 2` + `Follow-up actions: 2` (vía `followup_actions_count` sin N+1) + `View Case Summary` por outcome + filtros, paginación.
@@ -123,12 +125,13 @@ Cada página: `Loading…`, `Success`, `Empty`, `Error` con `Retry`, sin stack t
 - `web/src/pages/__tests__/ResearchHistory.test.tsx` (history, filters, assessment/gaps visible, gap filter)
 - `web/src/pages/__tests__/ResearchTasks.test.tsx` (list, filters combinados, cards, outcome badge, has_outcome)
 - `web/src/pages/__tests__/ResearchTaskDetail.test.tsx` (detail, outcome: create/edit/delete, evidence SUPPORTS/CONTRADICTS, assessment statuses, gaps CRITICAL/WARNING/INFO, quick actions)
+- `web/src/pages/__tests__/ResearchPlanning.test.tsx` (planning: loading, empty, recommended, deferred, scores, reasons, filters, Start Research)
 - `web/src/pages/__tests__/ResearchSources.test.tsx` (list, create, empty, error)
 - `web/src/pages/__tests__/SourceDetail.test.tsx` (detail, citations)
 - `web/src/pages/__tests__/Evidence.test.tsx` (list, create)
 
 ```bash
-npm run test # vitest run → 69 tests
+npm run test # vitest run → 78+ tests
 ```
 
 ## Limitaciones

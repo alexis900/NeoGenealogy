@@ -174,6 +174,16 @@ export const api = {
   getOutcomeEvidence: (treeId:number, outcomeId:number)=> req<{items: import("./types").EvidenceWithRelationship[]}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence`),
   attachEvidence: (treeId:number, outcomeId:number, evidenceId:number, body:{relationship:string})=> req<{outcome_id:number;evidence_id:number;relationship:string}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"POST", body:JSON.stringify(body)}),
   detachEvidence: (treeId:number, outcomeId:number, evidenceId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"DELETE"}),
+  // Planning
+  getPlan: (treeId:number, params?:{limit?:number;min_score?:number;priority?:string;researchability?:string})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.min_score!==undefined) q.set("min_score",String(params.min_score));
+    if(params?.priority) q.set("priority",params.priority);
+    if(params?.researchability) q.set("researchability",params.researchability);
+    const s=q.toString()?`?${q}`:"";
+    return req<{generated_at:string;total_candidates:number;summary:{total_candidates:number;recommended_count:number;deferred_count:number;active_count:number;inconclusive_count:number;high_priority_count:number;critical_gap_count:number};recommended: import("./types").ResearchPlanItem[];deferred: import("./types").ResearchPlanItem[]}>(`/api/v1/trees/${treeId}/research/plan${s}`);
+  },
   // Case Summary
   getCaseSummary: (treeId:number, taskId:number)=> req<import("./types").ResearchCaseSummary>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/case-summary`),
 };

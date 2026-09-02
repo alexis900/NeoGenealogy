@@ -1,3 +1,4 @@
+#![recursion_limit = "512"]
 pub mod error;
 pub mod handlers;
 pub mod pagination;
@@ -153,6 +154,10 @@ pub fn create_router(state: AppState) -> Router {
         .route(
             "/trees/:tree_id/research-tasks/:task_id/case-summary",
             get(handlers::case_summary::get_case_summary),
+        )
+        .route(
+            "/trees/:tree_id/research/plan",
+            get(handlers::planning::get_research_plan),
         )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));

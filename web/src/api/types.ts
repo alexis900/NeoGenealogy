@@ -157,4 +157,21 @@ export interface ResearchCaseSummary {
   closure_warnings: ResearchCaseClosureWarning[];
 }
 
+export interface ResearchPlanningReason { code:string; label:string; description:string; }
+export interface ResearchPlanItem {
+  opportunity_id:number; person_id:number; title:string;
+  priority:string; research_score:number; planning_score:number;
+  researchability:string; confidence:number;
+  active_task:boolean; task_status?:string|null;
+  reasons: ResearchPlanningReason[];
+}
+export interface ResearchPlanSummary {
+  total_candidates:number; recommended_count:number; deferred_count:number;
+  active_count:number; inconclusive_count:number; high_priority_count:number; critical_gap_count:number;
+}
+export interface ResearchPlan {
+  generated_at:string; total_candidates:number; summary:ResearchPlanSummary;
+  recommended: ResearchPlanItem[]; deferred: ResearchPlanItem[];
+}
+
 export interface ApiErrorBody { error:{code:string; message:string} }

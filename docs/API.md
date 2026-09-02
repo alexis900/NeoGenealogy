@@ -251,6 +251,22 @@ GET /api/v1/trees/:tree_id/research-tasks/:task_id/case-summary → 200 {task, p
 
 Ver `docs/RESEARCH_CASE_SUMMARY.md`.
 
+## Research Planning — Fase 5.0
+
+```
+GET /api/v1/trees/:tree_id/research/plan?limit=10&min_score=70&priority=high&researchability=high → 200 {generated_at, total_candidates, summary:{total_candidates,recommended_count,deferred_count,active_count,inconclusive_count,high_priority_count,critical_gap_count}, recommended:[{opportunity_id,person_id,title,priority,research_score,planning_score,researchability,confidence,active_task,task_status,reasons:[{code,label,description}]}], deferred:[...]}
+```
+
+- `limit` 1..100 default 10 (recomended size, `DEFAULT_PLAN_SIZE`), `min_score` 0..100 filtra `planning_score`, `priority` ∈ low/info/medium/warning/high/critical, `researchability` ∈ low/medium/high (400 `INVALID_*` si inválido)
+- `planning_score = research_score*0.55 + researchability*0.20 + confidence*0.10 + evidence_gap*0.10 + task_state*0.05`, clamp 0..100, puro en `storage::planning` (sin SQL, sin persistencia)
+- `researchability HIGH→100 MEDIUM→60 LOW→20`, `confidence*100`, `gap CRITICAL→100 WARNING→60 INFO→20 / max`, `task_state NO TASK→100 OPEN→80 IN_PROGRESS→40 INCONCLUSIVE→20 RESOLVED/REJECTED→0 (excluidas)`
+- Ranking `planning_score DESC, research_score DESC, confidence DESC, opportunity_id ASC` determinista; `RESOLVED/REJECTED` excluidas, `INCONCLUSIVE` penalizada con `PREVIOUSLY_INCONCLUSIVE`, `OPEN/IN_PROGRESS` penalizadas con `ACTIVE_TASK`
+- `reasons` códigos `HIGH_RESEARCH_SCORE,HIGH_RESEARCHABILITY,HIGH_CONFIDENCE,CRITICAL_EVIDENCE_GAP,WARNING_EVIDENCE_GAP,NO_ACTIVE_TASK,ACTIVE_TASK,PREVIOUSLY_INCONCLUSIVE` (+ `INFO_EVIDENCE_GAP`)
+- Sin tabla `research_plans`; `GET /trees/:tree_id/research/plan` usa `get_research_planning_candidates(tree_id)` O(1) queries (opportunities + tasks + outcomes + gaps batch), tree isolation obligatoria
+- OpenAPI `ResearchPlan`, `ResearchPlanItem`, `ResearchPlanSummary`, `ResearchPlanningReason`, `ResearchPlanningReasonCode`
+
+Ver `docs/RESEARCH_PLANNING.md`.
+
 ## Errores
 
 ```json

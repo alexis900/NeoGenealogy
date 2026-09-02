@@ -41,6 +41,7 @@ export default function ResearchWorkspace(){
     <p className="text-sm text-gray-600">Your research workspace — what deserves investigation, what you are working on, and what you have discovered.</p>
     <nav className="flex gap-2 text-sm">
       <Link to={`/trees/${id}/research`} className="px-3 py-1 bg-gray-800 text-white rounded">Overview</Link>
+      <Link to={`/trees/${id}/research/planning`} className="px-3 py-1 border rounded hover:bg-gray-50">Planning</Link>
       <Link to={`/trees/${id}/research/opportunities`} className="px-3 py-1 border rounded hover:bg-gray-50">Opportunities</Link>
       <Link to={`/trees/${id}/research/tasks`} className="px-3 py-1 border rounded hover:bg-gray-50">Tasks</Link>
       <Link to={`/trees/${id}/research/history`} className="px-3 py-1 border rounded hover:bg-gray-50">History</Link>

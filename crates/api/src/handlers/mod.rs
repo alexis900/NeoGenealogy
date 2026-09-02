@@ -10,6 +10,7 @@ pub mod health;
 pub mod openapi;
 pub mod opportunities;
 pub mod persons;
+pub mod planning;
 pub mod research_outcomes;
 pub mod research_summary;
 pub mod research_tasks;

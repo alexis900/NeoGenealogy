@@ -1,9 +1,10 @@
-# NeoGenealogy v0.4.5 — Research Case Summary
+# NeoGenealogy v0.5.0 — Research Planning Core
 
-Herramienta local de análisis genealógico. Release v0.4.5 añade Research Case Summary (vista derivada `Task → Outcome → Evidence → Assessment → Gaps → Follow-ups → Actions → Case Summary + Warnings + Timeline`). Cierre del bloque 4.x.
+Herramienta local de análisis genealógico. Release v0.5.0 añade Research Planning Core: vista derivada determinista `Opportunity → Planning (planning_score) → User decides → Task`, sin persistencia, sin IA. Convierte `Research Score + researchability + confidence + gaps + task state` en plan `Recommended/Deferred` explicable.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
+WHAT TO RESEARCH NEXT        → Research Planning (planning_score + reasons, Recommended/Deferred)
 WHAT THE USER DECIDED TO INVESTIGATE → Research Task (OPEN → RESOLVED/…)
 WHAT THE USER DISCOVERED     → Research Outcome (CONFIRMED/…)
 WHAT SUPPORTS THAT CONCLUSION → Evidence (SUPPORTS/CONTRADICTS) → Source + Citation
@@ -53,12 +54,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Case Summary` (derivado, case_summary.rs)
-- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Case Summary, OpenAPI)
+- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Case Summary` (derivado, case_summary.rs) + `Research Planning` (derivado, planning.rs, sin persistencia)
+- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Case Summary, Planning, OpenAPI)
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
-- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome + Follow-ups/Actions + Case Summary integration)
+- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Planning + Sources/Evidence + Outcome + Follow-ups/Actions + Case Summary integration)
 
-Véase `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+Véase `docs/RESEARCH_PLANNING.md`, `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -73,8 +74,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence + **Case Summary** con Warnings/Timeline/Closure), `/trees/:treeId/research/history` (filtros assessment/gap + View Case Summary), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
-Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED] → Case Summary` — ver `docs/RESEARCH_CASE_SUMMARY.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/planning` (Planning: Recommended/Deferred + Why is this here? + planning_score vs research_score), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence + **Case Summary** con Warnings/Timeline/Closure), `/trees/:treeId/research/history` (filtros assessment/gap + View Case Summary), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Planning → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED] → Case Summary` — ver `docs/RESEARCH_PLANNING.md`.
 
 ## API REST
 

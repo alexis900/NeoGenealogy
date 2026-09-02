@@ -12,6 +12,7 @@ export default function Layout(){
           {link(`${base}/research`, "Research")}
           <div className="pl-3 space-y-1 text-sm">
             {link(`${base}/research`, "Overview")}
+            {link(`${base}/research/planning`, "Planning")}
             {link(`${base}/research/opportunities`, "Opportunities")}
             {link(`${base}/research/tasks`, "Tasks")}
             {link(`${base}/research/history`, "History")}
