@@ -94,6 +94,41 @@ GET /api/v1/trees/1/source-coverage → { birth, marriage, death, other_events, 
 GET /api/v1/trees/1/analysis-runs → { items: [{ id, started_at, completed_at, engine_version, status }] }
 ```
 
+## Research Tasks
+
+```
+GET /api/v1/trees/1/research-tasks?status=OPEN&person_id=5&opportunity_id=2&limit=20
+POST /api/v1/trees/1/research-tasks {title, description, person_id, opportunity_id} → 201 {id, status:OPEN}
+GET /api/v1/trees/1/research-tasks/5 → 200 { ..., outcome: {id,type,summary,...}|null }
+PATCH /api/v1/trees/1/research-tasks/5 {title, description, status, resolution} → updated_at, started_at/completed_at auto
+DELETE /api/v1/trees/1/research-tasks/5 → 204 (CASCADE outcome)
+POST /api/v1/trees/1/research-opportunities/42/tasks {title, description} → 201 (reutiliza si OPEN/IN_PROGRESS existe)
+```
+
+- `status` ∈ OPEN,IN_PROGRESS,RESOLVED,REJECTED,INCONCLUSIVE (validado)
+- `person_id`/`opportunity_id` deben pertenecer al mismo `tree_id` (aislamiento)
+- `POST .../tasks` desde oportunidad valida oportunidad y asocia `person_id` automáticamente
+- `GET /research-tasks/:task_id` embebe `outcome` (`null` si no existe).
+
+## Research Outcomes — Fase 3.0
+
+```
+POST   /api/v1/trees/1/research-tasks/5/outcome {type, summary, details} → 201 {id,tree_id,task_id,type,summary,details,created_at,updated_at}
+GET    /api/v1/trees/1/research-outcomes?type=CONFIRMED&task_id=5&person_id=3&limit=20&offset=0 → 200 {items, pagination} (ORDER BY updated_at DESC)
+GET    /api/v1/trees/1/research-outcomes/10 → 200 | 404
+PATCH  /api/v1/trees/1/research-outcomes/10 {type, summary, details} → 200 (parcial)
+DELETE /api/v1/trees/1/research-outcomes/10 → 204
+```
+
+- `type` ∈ CONFIRMED,FALSE_LEAD,INCONCLUSIVE,NEW_LEAD,NO_EVIDENCE (400 `INVALID_RESEARCH_OUTCOME_TYPE` si inválido)
+- `summary` obligatorio no vacío (400 `INVALID_SUMMARY`)
+- `UNIQUE(task_id)` — segundo `POST` para misma Task → 409 `RESEARCH_OUTCOME_ALREADY_EXISTS`
+- `person_id` en listado filtra vía `JOIN research_tasks.person_id`
+- Aislamiento por `tree_id`; cross-tree → 404
+- `GET /research-tasks/:id` refleja `POST/PATCH/DELETE` outcome inmediatamente; `DELETE task` → `CASCADE` borra outcome
+
+Ver `docs/RESEARCH_OUTCOMES.md` para modelo completo, tipos con ejemplos y workflow `Opportunity → Task → Outcome`.
+
 ## Errores
 
 ```json

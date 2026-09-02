@@ -8,6 +8,7 @@ export default function Dashboard(){
   const {treeId}=useParams(); const id=Number(treeId);
   const [tree,setTree]=useState<any>(null);
   const [top,setTop]=useState<any[]>([]);
+  const [tasksSummary,setTasksSummary]=useState<any>(null);
   const [err,setErr]=useState<string|null>(null);
   const [loading,setLoading]=useState(true);
   const load=async()=>{
@@ -16,6 +17,19 @@ export default function Dashboard(){
       const t=await api.getTree(id);
       const topRes=await api.getTop(id,{limit:5});
       setTree(t); setTop(topRes.items);
+      try{
+        const tasks=await api.getTasks(id,{limit:100});
+        const counts={open:0,in_progress:0,resolved:0,rejected:0,inconclusive:0};
+        tasks.items.forEach((task:any)=>{
+          const s=task.status;
+          if(s==="OPEN") counts.open++;
+          else if(s==="IN_PROGRESS") counts.in_progress++;
+          else if(s==="RESOLVED") counts.resolved++;
+          else if(s==="REJECTED") counts.rejected++;
+          else if(s==="INCONCLUSIVE") counts.inconclusive++;
+        });
+        setTasksSummary(counts);
+      }catch{}
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load()},[id]);
@@ -30,6 +44,15 @@ export default function Dashboard(){
       <div className="border rounded p-4"><div className="text-2xl font-bold">{tree.findings}</div><div className="text-sm text-gray-600">Findings</div></div>
       <div className="border rounded p-4"><div className="text-2xl font-bold">{tree.research_opportunities}</div><div className="text-sm text-gray-600">Opportunities</div></div>
     </div>
+    {tasksSummary && <div className="border rounded p-4 bg-gray-50">
+      <h3 className="font-semibold mb-2">Research Tasks</h3>
+      <div className="flex gap-4 text-sm">
+        <span>Open {tasksSummary.open}</span>
+        <span>In Progress {tasksSummary.in_progress}</span>
+        <span>Resolved {tasksSummary.resolved}</span>
+      </div>
+      <Link to={`/trees/${id}/research/tasks`} className="text-blue-600 underline text-sm mt-2 inline-block">View Research Tasks →</Link>
+    </div>}
     <div>
       <h2 className="text-xl font-semibold mb-2">Top Research Opportunities</h2>
       <div className="space-y-2">

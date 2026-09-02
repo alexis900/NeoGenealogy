@@ -9,7 +9,8 @@ export default function Layout(){
       <aside className="w-56 border-r p-3 space-y-1 bg-gray-50">
         {treeId ? <>
           {link(`${base}`, "Dashboard")}
-          {link(`${base}/research`, "Research")}
+          {link(`${base}/research`, "Research Queue")}
+          {link(`${base}/research/tasks`, "Research Tasks")}
           {link(`${base}/persons`, "Persons")}
           {link(`${base}/findings`, "Findings")}
           {link(`${base}/branches`, "Branches")}

@@ -6,5 +6,7 @@ pub mod health;
 pub mod openapi;
 pub mod opportunities;
 pub mod persons;
+pub mod research_outcomes;
+pub mod research_tasks;
 pub mod runs;
 pub mod trees;

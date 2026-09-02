@@ -46,11 +46,14 @@ Tablas principales (con `tree_id` como límite de aislamiento):
 - `research_opportunities(id, tree_id, analysis_run_id, person_id, priority, score, confidence, researchability, why, what JSON, potential_sources JSON, breakdown JSON, missing_information JSON, reasons JSON)`
 - `branch_analyses(id, tree_id, analysis_run_id, name, score, opportunity_count, high_priority_count, deepest_generation, source_coverage)`
 - `source_coverages(id, tree_id, analysis_run_id, birth, marriage, death, other_events, overall)`
+- `research_tasks(id, tree_id, opportunity_id FK SET NULL, person_id FK SET NULL, title, description, status CHECK, created_at, updated_at, started_at, completed_at, resolution, UNIQUE(active opportunity))`
+- `research_outcomes(id, tree_id FK CASCADE, task_id UNIQUE FK CASCADE, type CHECK(CONFIRMED…), summary, details, created_at, updated_at)` — ver `docs/RESEARCH_OUTCOMES.md`
 
 ### Foreign keys
 
-`ON DELETE CASCADE` para `trees → persons/families/events/sources/findings/opportunities/branch_analyses/source_coverages` — borrar árbol borra todo.  
-`ON DELETE SET NULL` para `events.person_id`, `findings.person_id` etc. — permite conservar findings aunque se borre persona ligada.  
+`ON DELETE CASCADE` para `trees → persons/families/events/sources/findings/opportunities/branch_analyses/source_coverages/research_tasks/research_outcomes` — borrar árbol borra todo.  
+`ON DELETE CASCADE` para `research_outcomes.task_id` y `research_outcomes.tree_id` — borrar Task borra su Outcome.  
+`ON DELETE SET NULL` para `research_tasks.opportunity_id/person_id`, `events.person_id`, `findings.person_id` etc. — permite conservar tasks aunque se borre oportunidad/persona.  
 `ON DELETE CASCADE` para `citations.source_id`, `family_members` — consistencia.
 
 Activadas con `PRAGMA foreign_keys = ON`.
@@ -67,6 +70,8 @@ findings(tree_id) findings(person_id) findings(severity)
 research_opportunities(tree_id) (score) (priority)
 branch_analyses(tree_id, analysis_run_id)
 source_coverages(tree_id, analysis_run_id)
+research_tasks(tree_id) (tree_id,status) (person_id) (opportunity_id) unique_active(opportunity_id,status) WHERE status IN ('OPEN','IN_PROGRESS')
+research_outcomes(tree_id) (task_id UNIQUE) (type) (created_at)
 ```
 
 ### Raw tags
@@ -102,7 +107,9 @@ Idempotencia: `UNIQUE(tree_id, gedcom_id)` para `persons`/`families`/`sources`; 
 ```
 get_tree, list_trees, get_person, list_persons(limit/offset), get_family, list_families,
 get_findings, get_research_opportunities, get_top_research_opportunities(limit, priority>=High),
-get_branches, get_source_coverage, get_analysis_runs, count(tree_id)
+get_branches, get_source_coverage, get_analysis_runs, count(tree_id),
+create_research_task, get_research_task, list_research_tasks, update_research_task, delete_research_task,
+create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome
 ```
 
 Paginación: `limit/offset` en listados para preparar futura API HTTP sin rediseñar acceso a datos.

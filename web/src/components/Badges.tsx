@@ -17,3 +17,8 @@ export function FindingBadge({severity}:{severity:string}){
   const map:any={critical:"bg-red-800",high:"bg-red-600",warning:"bg-amber-500",medium:"bg-amber-400",low:"bg-gray-300",info:"bg-blue-400"};
   return <span className={`px-2 py-0.5 rounded text-xs text-white ${map[severity]||"bg-gray-400"}`}>{severity}</span>
 }
+export function TaskStatusBadge({status}:{status:string}){
+  const map:any={OPEN:"bg-gray-500",IN_PROGRESS:"bg-blue-600",RESOLVED:"bg-emerald-600",REJECTED:"bg-red-600",INCONCLUSIVE:"bg-amber-600"};
+  const label = status.replace("_"," ");
+  return <span className={`px-2 py-0.5 rounded text-xs font-semibold text-white ${map[status]||"bg-gray-400"}`}>{label}</span>
+}

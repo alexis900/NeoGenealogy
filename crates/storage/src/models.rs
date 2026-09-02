@@ -171,6 +171,34 @@ pub struct SourceCoverageRow {
     pub overall: Option<f64>,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchTaskRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub opportunity_id: Option<i64>,
+    pub person_id: Option<i64>,
+    pub title: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub resolution: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchOutcomeRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub task_id: i64,
+    pub r#type: String,
+    pub summary: String,
+    pub details: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 // Helper for counts
 #[derive(Debug, sqlx::FromRow)]
 pub struct CountRow {

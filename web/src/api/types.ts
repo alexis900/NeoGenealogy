@@ -56,4 +56,20 @@ export interface AnalysisRun {
   id:number; tree_id:number; started_at:string; completed_at?:string; engine_version?:string; status:string;
 }
 
+export type TaskStatus = "OPEN" | "IN_PROGRESS" | "RESOLVED" | "REJECTED" | "INCONCLUSIVE";
+
+export interface ResearchTask {
+  id:number; tree_id:number; opportunity_id?:number|null; person_id?:number|null;
+  title:string; description?:string|null; status:TaskStatus;
+  created_at:string; updated_at:string; started_at?:string|null; completed_at?:string|null; resolution?:string|null;
+  outcome?: ResearchOutcome | null;
+}
+
+export type OutcomeType = "CONFIRMED" | "FALSE_LEAD" | "INCONCLUSIVE" | "NEW_LEAD" | "NO_EVIDENCE";
+
+export interface ResearchOutcome {
+  id:number; tree_id:number; task_id:number; type:OutcomeType; summary:string; details?:string|null;
+  created_at:string; updated_at:string;
+}
+
 export interface ApiErrorBody { error:{code:string; message:string} }

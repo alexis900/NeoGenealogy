@@ -381,4 +381,445 @@ impl Storage {
                 .await?;
         Ok(rows)
     }
+
+    // --- Research Tasks ---
+    pub async fn create_research_task(
+        &self,
+        tree_id: i64,
+        opportunity_id: Option<i64>,
+        person_id: Option<i64>,
+        title: &str,
+        description: Option<&str>,
+    ) -> Result<ResearchTaskRow, StorageError> {
+        // Validate tree isolation for opportunity/person if provided
+        if let Some(oid) = opportunity_id {
+            let opp_tree: Option<i64> =
+                sqlx::query_scalar("SELECT tree_id FROM research_opportunities WHERE id=?1")
+                    .bind(oid)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .flatten();
+            if opp_tree != Some(tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "opportunity {oid} not in tree {tree_id}"
+                )));
+            }
+        }
+        if let Some(pid) = person_id {
+            let p_tree: Option<i64> = sqlx::query_scalar("SELECT tree_id FROM persons WHERE id=?1")
+                .bind(pid)
+                .fetch_optional(&self.pool)
+                .await?
+                .flatten();
+            if p_tree != Some(tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "person {pid} not in tree {tree_id}"
+                )));
+            }
+        }
+        // Check duplicate active task for same opportunity
+        if let Some(oid) = opportunity_id {
+            let existing: Option<i64> = sqlx::query_scalar(
+                "SELECT id FROM research_tasks WHERE opportunity_id=?1 AND status IN ('OPEN','IN_PROGRESS') LIMIT 1",
+            )
+            .bind(oid)
+            .fetch_optional(&self.pool)
+            .await?
+            .flatten();
+            if let Some(eid) = existing {
+                // Return existing to avoid duplicate (spec: reuse)
+                let row = sqlx::query_as::<_, ResearchTaskRow>(
+                    "SELECT * FROM research_tasks WHERE id=?1",
+                )
+                .bind(eid)
+                .fetch_one(&self.pool)
+                .await?;
+                return Ok(row);
+            }
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_tasks (tree_id, opportunity_id, person_id, title, description, status, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,'OPEN',?6,?7)",
+        )
+        .bind(tree_id)
+        .bind(opportunity_id)
+        .bind(person_id)
+        .bind(title)
+        .bind(description)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await;
+        match res {
+            Ok(r) => {
+                let id = r.last_insert_rowid();
+                let row = sqlx::query_as::<_, ResearchTaskRow>(
+                    "SELECT * FROM research_tasks WHERE id=?1",
+                )
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+                Ok(row)
+            }
+            Err(e) => {
+                // Handle unique constraint violation as conflict
+                if e.to_string().contains("UNIQUE") {
+                    return Err(StorageError::Import(
+                        "duplicate active task for opportunity".into(),
+                    ));
+                }
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn get_research_task(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchTaskRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchTaskRow>("SELECT * FROM research_tasks WHERE id=?1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_tasks(
+        &self,
+        tree_id: i64,
+        status: Option<&str>,
+        person_id: Option<i64>,
+        opportunity_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchTaskRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_tasks WHERE tree_id = ?".to_string();
+        let mut count_sql = "SELECT COUNT(*) FROM research_tasks WHERE tree_id = ?".to_string();
+        if status.is_some() {
+            sql.push_str(" AND status = ?");
+            count_sql.push_str(" AND status = ?");
+        }
+        if person_id.is_some() {
+            sql.push_str(" AND person_id = ?");
+            count_sql.push_str(" AND person_id = ?");
+        }
+        if opportunity_id.is_some() {
+            sql.push_str(" AND opportunity_id = ?");
+            count_sql.push_str(" AND opportunity_id = ?");
+        }
+        sql.push_str(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchTaskRow>(&sql).bind(tree_id);
+        if let Some(s) = status {
+            cq = cq.bind(s);
+            q = q.bind(s);
+        }
+        if let Some(pid) = person_id {
+            cq = cq.bind(pid);
+            q = q.bind(pid);
+        }
+        if let Some(oid) = opportunity_id {
+            cq = cq.bind(oid);
+            q = q.bind(oid);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn update_research_task(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        description: Option<&str>,
+        status: Option<&str>,
+        resolution: Option<&str>,
+    ) -> Result<ResearchTaskRow, StorageError> {
+        let existing = self
+            .get_research_task(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {id} not found")))?;
+        let new_title = title.unwrap_or(&existing.title).to_string();
+        let new_desc = description.or(existing.description.as_deref());
+        let new_status = status.unwrap_or(&existing.status).to_string();
+        let valid = [
+            "OPEN",
+            "IN_PROGRESS",
+            "RESOLVED",
+            "REJECTED",
+            "INCONCLUSIVE",
+        ];
+        if !valid.contains(&new_status.as_str()) {
+            return Err(StorageError::Import(format!("invalid status {new_status}")));
+        }
+        let now = crate::models::now_iso();
+        let mut started_at = existing.started_at.clone();
+        let mut completed_at = existing.completed_at.clone();
+        if new_status == "IN_PROGRESS" && started_at.is_none() {
+            started_at = Some(now.clone());
+        }
+        if ["RESOLVED", "REJECTED", "INCONCLUSIVE"].contains(&new_status.as_str())
+            && completed_at.is_none()
+        {
+            completed_at = Some(now.clone());
+        }
+        let new_resolution = resolution.or(existing.resolution.as_deref());
+        sqlx::query(
+            "UPDATE research_tasks SET title=?1, description=?2, status=?3, resolution=?4, updated_at=?5, started_at=?6, completed_at=?7 WHERE id=?8",
+        )
+        .bind(&new_title)
+        .bind(new_desc)
+        .bind(&new_status)
+        .bind(new_resolution)
+        .bind(&now)
+        .bind(&started_at)
+        .bind(&completed_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_research_task(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_research_task(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_tasks WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // --- Research Outcomes ---
+    pub async fn create_research_outcome(
+        &self,
+        tree_id: i64,
+        task_id: i64,
+        outcome_type: &str,
+        summary: &str,
+        details: Option<&str>,
+    ) -> Result<ResearchOutcomeRow, StorageError> {
+        let valid = [
+            "CONFIRMED",
+            "FALSE_LEAD",
+            "INCONCLUSIVE",
+            "NEW_LEAD",
+            "NO_EVIDENCE",
+        ];
+        if !valid.contains(&outcome_type) {
+            return Err(StorageError::Import(format!(
+                "invalid outcome type {outcome_type}"
+            )));
+        }
+        if summary.trim().is_empty() {
+            return Err(StorageError::Import("summary must not be empty".into()));
+        }
+        // Validate task exists and belongs to same tree
+        let task = self
+            .get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        if task.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} not in tree {tree_id}"
+            )));
+        }
+        // Check unique task_id
+        let existing: Option<i64> =
+            sqlx::query_scalar("SELECT id FROM research_outcomes WHERE task_id=?1")
+                .bind(task_id)
+                .fetch_optional(&self.pool)
+                .await?
+                .flatten();
+        if existing.is_some() {
+            return Err(StorageError::Import(
+                "outcome already exists for task".into(),
+            ));
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_outcomes (tree_id, task_id, type, summary, details, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        )
+        .bind(tree_id)
+        .bind(task_id)
+        .bind(outcome_type)
+        .bind(summary)
+        .bind(details)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await;
+        match res {
+            Ok(r) => {
+                let id = r.last_insert_rowid();
+                let row = sqlx::query_as::<_, ResearchOutcomeRow>(
+                    "SELECT * FROM research_outcomes WHERE id=?1",
+                )
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+                Ok(row)
+            }
+            Err(e) => {
+                if e.to_string().contains("UNIQUE") {
+                    return Err(StorageError::Import(
+                        "outcome already exists for task".into(),
+                    ));
+                }
+                Err(e.into())
+            }
+        }
+    }
+
+    pub async fn get_research_outcome(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchOutcomeRow>, StorageError> {
+        let row =
+            sqlx::query_as::<_, ResearchOutcomeRow>("SELECT * FROM research_outcomes WHERE id=?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_outcome_by_task(
+        &self,
+        task_id: i64,
+    ) -> Result<Option<ResearchOutcomeRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchOutcomeRow>(
+            "SELECT * FROM research_outcomes WHERE task_id=?1",
+        )
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_outcomes(
+        &self,
+        tree_id: i64,
+        outcome_type: Option<&str>,
+        task_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchOutcomeRow>, i64), StorageError> {
+        // For person_id filter, join via research_tasks
+        // This method supports type, task_id; person_id filter is handled via join in a separate method or via task filter
+        let mut sql = "SELECT ro.* FROM research_outcomes ro WHERE ro.tree_id = ?".to_string();
+        let mut count_sql =
+            "SELECT COUNT(*) FROM research_outcomes ro WHERE ro.tree_id = ?".to_string();
+        if outcome_type.is_some() {
+            sql.push_str(" AND ro.type = ?");
+            count_sql.push_str(" AND ro.type = ?");
+        }
+        if task_id.is_some() {
+            sql.push_str(" AND ro.task_id = ?");
+            count_sql.push_str(" AND ro.task_id = ?");
+        }
+        sql.push_str(" ORDER BY ro.updated_at DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchOutcomeRow>(&sql).bind(tree_id);
+        if let Some(t) = outcome_type {
+            cq = cq.bind(t);
+            q = q.bind(t);
+        }
+        if let Some(tid) = task_id {
+            cq = cq.bind(tid);
+            q = q.bind(tid);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_research_outcomes_with_person(
+        &self,
+        tree_id: i64,
+        outcome_type: Option<&str>,
+        person_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchOutcomeRow>, i64), StorageError> {
+        if let Some(pid) = person_id {
+            // Join to filter by person_id via task
+            let mut sql = "SELECT ro.* FROM research_outcomes ro JOIN research_tasks rt ON ro.task_id = rt.id WHERE ro.tree_id = ? AND rt.person_id = ?".to_string();
+            let mut count_sql = "SELECT COUNT(*) FROM research_outcomes ro JOIN research_tasks rt ON ro.task_id = rt.id WHERE ro.tree_id = ? AND rt.person_id = ?".to_string();
+            if outcome_type.is_some() {
+                sql.push_str(" AND ro.type = ?");
+                count_sql.push_str(" AND ro.type = ?");
+            }
+            sql.push_str(" ORDER BY ro.updated_at DESC LIMIT ? OFFSET ?");
+            let mut cq = sqlx::query_scalar::<_, i64>(&count_sql)
+                .bind(tree_id)
+                .bind(pid);
+            let mut q = sqlx::query_as::<_, ResearchOutcomeRow>(&sql)
+                .bind(tree_id)
+                .bind(pid);
+            if let Some(t) = outcome_type {
+                cq = cq.bind(t);
+                q = q.bind(t);
+            }
+            let total = cq.fetch_one(&self.pool).await?;
+            q = q.bind(limit).bind(offset);
+            let rows = q.fetch_all(&self.pool).await?;
+            Ok((rows, total))
+        } else {
+            self.list_research_outcomes(tree_id, outcome_type, None, limit, offset)
+                .await
+        }
+    }
+
+    pub async fn update_research_outcome(
+        &self,
+        id: i64,
+        outcome_type: Option<&str>,
+        summary: Option<&str>,
+        details: Option<&str>,
+    ) -> Result<ResearchOutcomeRow, StorageError> {
+        let existing = self
+            .get_research_outcome(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("outcome {id} not found")))?;
+        let new_type = outcome_type.unwrap_or(&existing.r#type).to_string();
+        let valid = [
+            "CONFIRMED",
+            "FALSE_LEAD",
+            "INCONCLUSIVE",
+            "NEW_LEAD",
+            "NO_EVIDENCE",
+        ];
+        if !valid.contains(&new_type.as_str()) {
+            return Err(StorageError::Import(format!(
+                "invalid outcome type {new_type}"
+            )));
+        }
+        let new_summary = summary.unwrap_or(&existing.summary).to_string();
+        if new_summary.trim().is_empty() {
+            return Err(StorageError::Import("summary must not be empty".into()));
+        }
+        let new_details = details.or(existing.details.as_deref());
+        let now = crate::models::now_iso();
+        sqlx::query(
+            "UPDATE research_outcomes SET type=?1, summary=?2, details=?3, updated_at=?4 WHERE id=?5",
+        )
+        .bind(&new_type)
+        .bind(&new_summary)
+        .bind(new_details)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_research_outcome(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_research_outcome(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_outcomes WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }

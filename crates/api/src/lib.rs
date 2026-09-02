@@ -6,7 +6,7 @@ pub mod state;
 use axum::{
     http::{HeaderValue, Method},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use state::AppState;
@@ -61,6 +61,34 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/analysis-runs/:run_id",
             get(handlers::runs::get_run),
         )
+        .route(
+            "/trees/:tree_id/research-tasks",
+            get(handlers::research_tasks::list_tasks).post(handlers::research_tasks::create_task),
+        )
+        .route(
+            "/trees/:tree_id/research-tasks/:task_id",
+            get(handlers::research_tasks::get_task)
+                .patch(handlers::research_tasks::update_task)
+                .delete(handlers::research_tasks::delete_task),
+        )
+        .route(
+            "/trees/:tree_id/research-opportunities/:opportunity_id/tasks",
+            post(handlers::research_tasks::create_task_from_opportunity),
+        )
+        .route(
+            "/trees/:tree_id/research-tasks/:task_id/outcome",
+            post(handlers::research_outcomes::create_outcome),
+        )
+        .route(
+            "/trees/:tree_id/research-outcomes",
+            get(handlers::research_outcomes::list_outcomes),
+        )
+        .route(
+            "/trees/:tree_id/research-outcomes/:outcome_id",
+            get(handlers::research_outcomes::get_outcome)
+                .patch(handlers::research_outcomes::update_outcome)
+                .delete(handlers::research_outcomes::delete_outcome),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 
@@ -94,7 +122,13 @@ fn cors_layer() -> CorsLayer {
         } else {
             CorsLayer::new()
                 .allow_origin(origin.parse::<HeaderValue>().unwrap())
-                .allow_methods([Method::GET])
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PATCH,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
         }
     } else {
         CorsLayer::new()
@@ -102,7 +136,13 @@ fn cors_layer() -> CorsLayer {
             .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
             .allow_origin("http://127.0.0.1:3000".parse::<HeaderValue>().unwrap())
             .allow_origin("http://127.0.0.1:5173".parse::<HeaderValue>().unwrap())
-            .allow_methods([Method::GET])
+            .allow_methods([
+                Method::GET,
+                Method::POST,
+                Method::PATCH,
+                Method::DELETE,
+                Method::OPTIONS,
+            ])
             .allow_headers([axum::http::header::CONTENT_TYPE])
     }
 }
