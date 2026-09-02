@@ -33,6 +33,8 @@ export default function ResearchTaskDetail(){
   const [assessment,setAssessment]=useState<any>(null);
   const [gaps,setGaps]=useState<any[]>([]);
   const [followups,setFollowups]=useState<any[]>([]);
+  const [followupActions,setFollowupActions]=useState<any[]>([]);
+  const [followupNotes,setFollowupNotes]=useState<{[key:number]:string}>({});
   const [sources,setSources]=useState<any[]>([]);
   const [citations,setCitations]=useState<any[]>([]);
   const [showAddEvidence,setShowAddEvidence]=useState(false);
@@ -52,9 +54,10 @@ export default function ResearchTaskDetail(){
           setAssessment((detailed as any).evidence_assessment || null);
           setGaps((detailed as any).evidence_gaps || []);
           setFollowups((detailed as any).research_followups || []);
-        }catch{ setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); }
+          setFollowupActions((detailed as any).followup_actions || []);
+        }catch{ setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); setFollowupActions([]); }
       } else {
-        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
+        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); setFollowupActions([]);
       }
       if(t.opportunity_id){
         try{
@@ -103,12 +106,12 @@ export default function ResearchTaskDetail(){
       try{
         const detailed=await api.getOutcome(tid, o.id);
           if((detailed as any).id===o.id){
-            setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]);
+            setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]); setFollowupActions((detailed as any).followup_actions||[]);
           } else {
-            setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
+            setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); setFollowupActions([]);
           }
         }catch{
-          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
+          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); setFollowupActions([]);
         }
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
@@ -120,7 +123,7 @@ export default function ResearchTaskDetail(){
       try{
         const detailed=await api.getOutcome(tid,task.outcome.id);
         if((detailed as any).id===task.outcome.id){
-          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]);
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null); setGaps((detailed as any).evidence_gaps||[]); setFollowups((detailed as any).research_followups||[]); setFollowupActions((detailed as any).followup_actions||[]);
         } else {
           setTask({...task, outcome:o});
         }
@@ -134,7 +137,7 @@ export default function ResearchTaskDetail(){
     if(!confirm("Delete outcome?")) return;
     try{
       await api.deleteOutcome(tid,task.outcome.id);
-      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]);
+      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null); setGaps([]); setFollowups([]); setFollowupActions([]);
     }catch(e:any){setErr(e.message)}
   };
   const addEvidence=async()=>{
@@ -149,6 +152,7 @@ export default function ResearchTaskDetail(){
       setAssessment((detailed as any).evidence_assessment||null);
       setGaps((detailed as any).evidence_gaps||[]);
       setFollowups((detailed as any).research_followups||[]);
+      setFollowupActions((detailed as any).followup_actions||[]);
       setEvStatement(""); setEvNotes(""); setEvCitationId(""); setEvSourceId(""); setShowAddEvidence(false);
     }catch(e:any){setErr(e.message)} finally{setEvSaving(false)}
   };
@@ -162,6 +166,33 @@ export default function ResearchTaskDetail(){
       setAssessment((detailed as any).evidence_assessment||null);
       setGaps((detailed as any).evidence_gaps||[]);
       setFollowups((detailed as any).research_followups||[]);
+      setFollowupActions((detailed as any).followup_actions||[]);
+    }catch(e:any){setErr(e.message)}
+  };
+
+  const startFollowup=async(followupCode:string)=>{
+    if(!task.outcome) return;
+    try{
+      await api.createFollowupAction(tid, task.outcome.id, {followup_code: followupCode});
+      const detailed=await api.getOutcome(tid, task.outcome.id);
+      setFollowupActions((detailed as any).followup_actions||[]);
+      setFollowups((detailed as any).research_followups||[]);
+    }catch(e:any){setErr(e.message)}
+  };
+  const updateFollowupStatus=async(actionId:number, status:string)=>{
+    try{
+      const notes = followupNotes[actionId];
+      await api.updateFollowupAction(tid, actionId, {status, notes: notes!==undefined?notes:undefined});
+      const detailed=await api.getOutcome(tid, task.outcome.id);
+      setFollowupActions((detailed as any).followup_actions||[]);
+    }catch(e:any){setErr(e.message)}
+  };
+  const deleteFollowupAction=async(actionId:number)=>{
+    if(!confirm("Delete follow-up action?")) return;
+    try{
+      await api.deleteFollowupAction(tid, actionId);
+      const detailed=await api.getOutcome(tid, task.outcome.id);
+      setFollowupActions((detailed as any).followup_actions||[]);
     }catch(e:any){setErr(e.message)}
   };
 
@@ -287,7 +318,8 @@ export default function ResearchTaskDetail(){
                     <div className="font-semibold">{f.title}</div>
                     <div className="text-xs mt-0.5">{f.description}</div>
                     {f.gap_code && <div className="text-xs mt-1 opacity-70">Gap: {f.gap_code}</div>}
-                    <div className="mt-2">
+                    <div className="mt-2 flex gap-2">
+                      <button onClick={()=>startFollowup(f.code)} className="text-xs px-2 py-1 bg-indigo-600 text-white rounded">Start follow-up</button>
                       {(f.code==="ADD_SUPPORTING_EVIDENCE" || f.code==="ADD_SECOND_SUPPORTING_EVIDENCE") && (
                         <button onClick={()=>setShowAddEvidence(true)} className="text-xs px-2 py-1 bg-emerald-600 text-white rounded">Add Evidence</button>
                       )}
@@ -295,6 +327,43 @@ export default function ResearchTaskDetail(){
                         <button onClick={()=>{const el=document.getElementById("evidence-section"); el?.scrollIntoView({behavior:"smooth"});}} className="text-xs px-2 py-1 bg-blue-600 text-white rounded">Review Evidence</button>
                       )}
                     </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Follow-up Actions */}
+          {followupActions.length>0 && (
+            <div className="border rounded p-3 bg-white space-y-2">
+              <div className="text-sm font-semibold">Research Follow-up Actions</div>
+              <div className="text-xs text-gray-600">{followupActions.length} action{followupActions.length!==1?"s":""} recorded — ordered by updated_at DESC</div>
+              <div className="space-y-2">
+                {followupActions.slice().sort((a:any,b:any)=> new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).map((act:any)=>(
+                  <div key={act.id} className="border rounded p-3 bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="text-sm font-semibold">{act.followup_code.replace(/_/g," ")}</div>
+                        <div className="text-xs">Status: <span className={`px-1 rounded font-semibold ${act.status==="COMPLETED"?"bg-emerald-100 text-emerald-800":act.status==="SKIPPED"?"bg-gray-200": "bg-yellow-100"}`}>{act.status}</span></div>
+                        <div className="text-xs text-gray-600">Created: {new Date(act.created_at).toLocaleString()}</div>
+                        {act.completed_at && <div className="text-xs text-gray-600">Completed: {new Date(act.completed_at).toLocaleString()}</div>}
+                      </div>
+                      <button onClick={()=>deleteFollowupAction(act.id)} className="text-xs text-red-600 underline">Delete</button>
+                    </div>
+                    {act.notes && <div className="text-sm mt-2 whitespace-pre-wrap border-t pt-2">"{act.notes}"</div>}
+                    <div className="mt-2">
+                      <textarea placeholder="Notes" value={followupNotes[act.id] ?? act.notes ?? ""} onChange={e=>setFollowupNotes({...followupNotes, [act.id]: e.target.value})} className="w-full border rounded px-2 py-1 text-sm" rows={2} />
+                    </div>
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {act.status==="OPEN" && <>
+                        <button onClick={()=>updateFollowupStatus(act.id,"COMPLETED")} className="text-xs px-2 py-1 bg-emerald-600 text-white rounded">Mark completed</button>
+                        <button onClick={()=>updateFollowupStatus(act.id,"SKIPPED")} className="text-xs px-2 py-1 bg-gray-600 text-white rounded">Skip</button>
+                      </>}
+                      {(act.status==="COMPLETED" || act.status==="SKIPPED") && (
+                        <button onClick={()=>updateFollowupStatus(act.id,"OPEN")} className="text-xs px-2 py-1 border rounded bg-white">Reopen</button>
+                      )}
+                    </div>
+                    {act.status==="COMPLETED" && <div className="text-xs text-emerald-700 mt-1">✓ Completed — Action completed, not gap resolved</div>}
                   </div>
                 ))}
               </div>

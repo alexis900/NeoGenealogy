@@ -131,6 +131,25 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research-outcomes/:outcome_id/evidence/:evidence_id",
             post(handlers::evidence::attach_evidence).delete(handlers::evidence::detach_evidence),
         )
+        .route(
+            "/trees/:tree_id/research-outcomes/:outcome_id/followup-actions",
+            get(handlers::followup_actions::list_outcome_actions)
+                .post(handlers::followup_actions::create_action),
+        )
+        .route(
+            "/trees/:tree_id/research-followup-actions",
+            get(handlers::followup_actions::list_actions),
+        )
+        .route(
+            "/trees/:tree_id/research-followup-actions/:action_id",
+            get(handlers::followup_actions::get_action)
+                .patch(handlers::followup_actions::update_action)
+                .delete(handlers::followup_actions::delete_action),
+        )
+        .route(
+            "/trees/:tree_id/research-tasks/:task_id/followup-actions",
+            get(handlers::followup_actions::list_task_actions),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 

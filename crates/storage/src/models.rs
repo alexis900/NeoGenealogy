@@ -241,6 +241,20 @@ pub struct OutcomeEvidenceRow {
     pub relationship: String,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchFollowupActionRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub task_id: i64,
+    pub outcome_id: i64,
+    pub followup_code: String,
+    pub status: String,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
 // Helper for counts
 #[derive(Debug, sqlx::FromRow)]
 pub struct CountRow {

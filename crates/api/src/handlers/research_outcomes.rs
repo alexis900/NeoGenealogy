@@ -97,6 +97,11 @@ async fn to_json_with_evidence(
         });
     let followups =
         neogenealogy_storage::assessment::calculate_research_followups(&row.r#type, &stats, &gaps);
+    let actions = state
+        .storage
+        .list_outcome_followup_actions(row.id)
+        .await
+        .unwrap_or_default();
     let assessment_json = assessment.map(|a| {
         serde_json::json!({
             "score": a.score,
@@ -133,6 +138,23 @@ async fn to_json_with_evidence(
             })
         })
         .collect::<Vec<_>>();
+    let actions_json = actions
+        .iter()
+        .map(|a| {
+            serde_json::json!({
+                "id": a.id,
+                "tree_id": a.tree_id,
+                "task_id": a.task_id,
+                "outcome_id": a.outcome_id,
+                "followup_code": a.followup_code,
+                "status": a.status,
+                "notes": a.notes,
+                "created_at": a.created_at,
+                "updated_at": a.updated_at,
+                "completed_at": a.completed_at
+            })
+        })
+        .collect::<Vec<_>>();
     serde_json::json!({
         "id": row.id,
         "tree_id": row.tree_id,
@@ -145,7 +167,8 @@ async fn to_json_with_evidence(
         "evidence": evidence,
         "evidence_assessment": assessment_json,
         "evidence_gaps": gaps_json,
-        "research_followups": followups_json
+        "research_followups": followups_json,
+        "followup_actions": actions_json
     })
 }
 
@@ -258,6 +281,11 @@ pub async fn list_outcomes(
             .get_outcomes_evidence_stats(&ids)
             .await
             .unwrap_or_default();
+        let actions_counts = state
+            .storage
+            .get_outcomes_followup_actions_counts(&ids)
+            .await
+            .unwrap_or_default();
         let mut filtered: Vec<serde_json::Value> = Vec::new();
         for row in all_rows {
             // assessment filter
@@ -321,11 +349,13 @@ pub async fn list_outcomes(
                 &gaps_for_fu,
             );
             let followups_json = followups.iter().map(|f| serde_json::json!({"code": f.code, "priority": f.priority, "title": f.title, "description": f.description, "gap_code": f.gap_code})).collect::<Vec<_>>();
+            let actions_count = actions_counts.get(&row.id).cloned().unwrap_or(0);
             let mut v = to_json(row);
             v["evidence"] = serde_json::json!(evidence);
             v["evidence_assessment"] = assessment_json;
             v["evidence_gaps"] = serde_json::json!(gaps_json);
             v["research_followups"] = serde_json::json!(followups_json);
+            v["followup_actions_count"] = serde_json::json!(actions_count);
             filtered.push(v);
         }
         let total = filtered.len() as i64;
@@ -376,6 +406,11 @@ pub async fn list_outcomes(
     let stats_map = state
         .storage
         .get_outcomes_evidence_stats(&ids)
+        .await
+        .unwrap_or_default();
+    let actions_counts = state
+        .storage
+        .get_outcomes_followup_actions_counts(&ids)
         .await
         .unwrap_or_default();
     let mut items = Vec::new();
@@ -431,11 +466,13 @@ pub async fn list_outcomes(
             &gaps_for_fu,
         );
         let followups_json = followups.iter().map(|f| serde_json::json!({"code": f.code, "priority": f.priority, "title": f.title, "description": f.description, "gap_code": f.gap_code})).collect::<Vec<_>>();
+        let actions_count = actions_counts.get(&row.id).cloned().unwrap_or(0);
         let mut v = to_json(row);
         v["evidence"] = serde_json::json!(evidence);
         v["evidence_assessment"] = assessment_json;
         v["evidence_gaps"] = serde_json::json!(gaps_json);
         v["research_followups"] = serde_json::json!(followups_json);
+        v["followup_actions_count"] = serde_json::json!(actions_count);
         items.push(v);
     }
     Ok(Json(Paginated {

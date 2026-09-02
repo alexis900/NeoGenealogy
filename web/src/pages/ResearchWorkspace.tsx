@@ -141,6 +141,16 @@ export default function ResearchWorkspace(){
           </div>
         </div>
       )}
+      {summary.followup_actions && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-sm font-semibold">Follow-up Actions</div>
+          <div className="text-xs text-gray-700 mt-1 space-y-0.5">
+            <div>Open: <strong>{summary.followup_actions.open ?? 0}</strong></div>
+            <div>Completed: <strong>{summary.followup_actions.completed ?? 0}</strong></div>
+            <div>Skipped: <strong>{summary.followup_actions.skipped ?? 0}</strong></div>
+          </div>
+        </div>
+      )}
     </div>}
   </div>
 }

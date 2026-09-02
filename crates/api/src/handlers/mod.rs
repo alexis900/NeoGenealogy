@@ -4,6 +4,7 @@ pub mod coverage;
 pub mod evidence;
 pub mod families;
 pub mod findings;
+pub mod followup_actions;
 pub mod health;
 pub mod openapi;
 pub mod opportunities;

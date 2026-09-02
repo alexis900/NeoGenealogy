@@ -24,8 +24,8 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-opportunities/{opportunity_id}/tasks": { "post": { "summary": "Create task from opportunity" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/outcome": { "post": { "summary": "Create research outcome for task" } },
             "/api/v1/trees/{tree_id}/research-outcomes": { "get": { "summary": "List research outcomes", "parameters": [{"name":"type"},{"name":"task_id"},{"name":"person_id"},{"name":"assessment_status","description":"Filter by Evidence Assessment status: NO_EVIDENCE,WEAK,MIXED,SUPPORTED,STRONGLY_SUPPORTED"},{"name":"gap","description":"Filter by Evidence Gap code: NO_SUPPORTING_EVIDENCE,NO_CITATION,SINGLE_SUPPORTING_EVIDENCE,CONTRADICTORY_EVIDENCE,SINGLE_SOURCE,CONFIRMED_WITHOUT_SUPPORT"}] } },
-            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome", "description": "Returns outcome with evidence[], evidence_assessment {score,status,...reasons}, evidence_gaps [{code,severity,title,description}] and research_followups [{code,priority,title,description,gap_code}]" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
-            "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes/sources/evidence/assessment/evidence_gaps counts)" } },
+            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome", "description": "Returns outcome with evidence[], evidence_assessment {score,status,...reasons}, evidence_gaps [{code,severity,title,description}], research_followups [{code,priority,title,description,gap_code}] and followup_actions [{id,task_id,outcome_id,followup_code,status,notes,created_at,updated_at,completed_at}]" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
+            "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes/sources/evidence/assessment/evidence_gaps/followup_actions counts)" } },
             "/api/v1/trees/{tree_id}/sources": { "get": { "summary": "List research sources", "parameters": [{"name":"type"}] }, "post": { "summary": "Create research source" } },
             "/api/v1/trees/{tree_id}/sources/{source_id}": { "get": { "summary": "Get research source" }, "patch": { "summary": "Update research source" }, "delete": { "summary": "Delete research source" } },
             "/api/v1/trees/{tree_id}/sources/{source_id}/citations": { "get": { "summary": "List citations for source" }, "post": { "summary": "Create citation" } },
@@ -34,6 +34,10 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/evidence/{evidence_id}": { "get": { "summary": "Get evidence" }, "patch": { "summary": "Update evidence" }, "delete": { "summary": "Delete evidence" } },
             "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}/evidence": { "get": { "summary": "List outcome evidence" } },
             "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}/evidence/{evidence_id}": { "post": { "summary": "Attach evidence to outcome" }, "delete": { "summary": "Detach evidence from outcome" } },
+            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}/followup-actions": { "get": { "summary": "List followup actions for outcome" }, "post": { "summary": "Create followup action", "description": "Validates FOLLOWUP_NOT_ACTIVE if followup not currently active" } },
+            "/api/v1/trees/{tree_id}/research-followup-actions": { "get": { "summary": "List followup actions", "parameters": [{"name":"task_id"},{"name":"outcome_id"},{"name":"status"},{"name":"followup_code"}] } },
+            "/api/v1/trees/{tree_id}/research-followup-actions/{action_id}": { "get": { "summary": "Get followup action" }, "patch": { "summary": "Update followup action" }, "delete": { "summary": "Delete followup action" } },
+            "/api/v1/trees/{tree_id}/research-tasks/{task_id}/followup-actions": { "get": { "summary": "List followup actions for task" } },
         },
         "components": {
             "schemas": {
@@ -106,9 +110,27 @@ pub async fn get_openapi() -> Json<Value> {
                         "evidence": { "type": "array" },
                         "evidence_assessment": { "$ref": "#/components/schemas/EvidenceAssessment" },
                         "evidence_gaps": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceGap" } },
-                        "research_followups": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowUp" } }
+                        "research_followups": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowUp" } },
+                        "followup_actions": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowupAction" } },
+                        "followup_actions_count": { "type": "integer" }
                     }
-                }
+                },
+                "ResearchFollowupAction": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "integer" },
+                        "tree_id": { "type": "integer" },
+                        "task_id": { "type": "integer" },
+                        "outcome_id": { "type": "integer" },
+                        "followup_code": { "type": "string", "enum": ["ADD_SUPPORTING_EVIDENCE","ADD_CITATION","REVIEW_CONTRADICTION","ADD_SECOND_SUPPORTING_EVIDENCE","REVIEW_SOURCE_COVERAGE"] },
+                        "status": { "type": "string", "enum": ["OPEN","COMPLETED","SKIPPED"] },
+                        "notes": { "type": "string", "nullable": true },
+                        "created_at": { "type": "string" },
+                        "updated_at": { "type": "string" },
+                        "completed_at": { "type": "string", "nullable": true }
+                    }
+                },
+                "ResearchFollowupActionStatus": { "type": "string", "enum": ["OPEN","COMPLETED","SKIPPED"] }
             }
         }
     }))

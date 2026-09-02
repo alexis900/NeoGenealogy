@@ -799,6 +799,13 @@ impl Storage {
                 }
             }
         }
+        let fa_counts = self
+            .count_followup_actions_by_status(tree_id)
+            .await
+            .unwrap_or_default();
+        let fa_open = fa_counts.get("OPEN").cloned().unwrap_or(0);
+        let fa_completed = fa_counts.get("COMPLETED").cloned().unwrap_or(0);
+        let fa_skipped = fa_counts.get("SKIPPED").cloned().unwrap_or(0);
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
@@ -807,7 +814,8 @@ impl Storage {
             "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
             "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong },
             "evidence_gaps": { "critical": cnt_gaps_critical, "warning": cnt_gaps_warning, "info": cnt_gaps_info },
-            "research_followups": { "high": cnt_fu_high, "medium": cnt_fu_medium, "low": cnt_fu_low }
+            "research_followups": { "high": cnt_fu_high, "medium": cnt_fu_medium, "low": cnt_fu_low },
+            "followup_actions": { "open": fa_open, "completed": fa_completed, "skipped": fa_skipped }
         }))
     }
 
@@ -1881,5 +1889,280 @@ impl Storage {
             );
         }
         Ok(res)
+    }
+
+    // --- Followup Actions ---
+    pub async fn create_followup_action(
+        &self,
+        tree_id: i64,
+        task_id: i64,
+        outcome_id: i64,
+        followup_code: &str,
+        notes: Option<&str>,
+    ) -> Result<ResearchFollowupActionRow, StorageError> {
+        let valid_codes = [
+            "ADD_SUPPORTING_EVIDENCE",
+            "ADD_CITATION",
+            "REVIEW_CONTRADICTION",
+            "ADD_SECOND_SUPPORTING_EVIDENCE",
+            "REVIEW_SOURCE_COVERAGE",
+        ];
+        if !valid_codes.contains(&followup_code) {
+            return Err(StorageError::Import(format!(
+                "invalid followup_code {followup_code}"
+            )));
+        }
+        // Validate outcome exists and belongs to tree and task
+        let outcome = self
+            .get_research_outcome(outcome_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("outcome {outcome_id} not found")))?;
+        if outcome.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "outcome {outcome_id} not in tree {tree_id}"
+            )));
+        }
+        if outcome.task_id != task_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} does not match outcome task {}",
+                outcome.task_id
+            )));
+        }
+        let task = self
+            .get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        if task.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} not in tree {tree_id}"
+            )));
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_followup_actions (tree_id, task_id, outcome_id, followup_code, status, notes, created_at, updated_at, completed_at) VALUES (?1,?2,?3,?4,'OPEN',?5,?6,?7,NULL)",
+        )
+        .bind(tree_id)
+        .bind(task_id)
+        .bind(outcome_id)
+        .bind(followup_code)
+        .bind(notes)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row = sqlx::query_as::<_, ResearchFollowupActionRow>(
+            "SELECT * FROM research_followup_actions WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_followup_action(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchFollowupActionRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchFollowupActionRow>(
+            "SELECT * FROM research_followup_actions WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn list_followup_actions(
+        &self,
+        tree_id: i64,
+        task_id: Option<i64>,
+        outcome_id: Option<i64>,
+        status: Option<&str>,
+        followup_code: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchFollowupActionRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_followup_actions WHERE tree_id = ?".to_string();
+        let mut count_sql =
+            "SELECT COUNT(*) FROM research_followup_actions WHERE tree_id = ?".to_string();
+        if task_id.is_some() {
+            sql.push_str(" AND task_id = ?");
+            count_sql.push_str(" AND task_id = ?");
+        }
+        if outcome_id.is_some() {
+            sql.push_str(" AND outcome_id = ?");
+            count_sql.push_str(" AND outcome_id = ?");
+        }
+        if status.is_some() {
+            sql.push_str(" AND status = ?");
+            count_sql.push_str(" AND status = ?");
+        }
+        if followup_code.is_some() {
+            sql.push_str(" AND followup_code = ?");
+            count_sql.push_str(" AND followup_code = ?");
+        }
+        sql.push_str(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchFollowupActionRow>(&sql).bind(tree_id);
+        if let Some(tid) = task_id {
+            cq = cq.bind(tid);
+            q = q.bind(tid);
+        }
+        if let Some(oid) = outcome_id {
+            cq = cq.bind(oid);
+            q = q.bind(oid);
+        }
+        if let Some(s) = status {
+            cq = cq.bind(s);
+            q = q.bind(s);
+        }
+        if let Some(c) = followup_code {
+            cq = cq.bind(c);
+            q = q.bind(c);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_task_followup_actions(
+        &self,
+        task_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchFollowupActionRow>, i64), StorageError> {
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_followup_actions WHERE task_id=?1")
+                .bind(task_id)
+                .fetch_one(&self.pool)
+                .await?;
+        let rows = sqlx::query_as::<_, ResearchFollowupActionRow>(
+            "SELECT * FROM research_followup_actions WHERE task_id=?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(task_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_outcome_followup_actions(
+        &self,
+        outcome_id: i64,
+    ) -> Result<Vec<ResearchFollowupActionRow>, StorageError> {
+        let rows = sqlx::query_as::<_, ResearchFollowupActionRow>(
+            "SELECT * FROM research_followup_actions WHERE outcome_id=?1 ORDER BY updated_at DESC",
+        )
+        .bind(outcome_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_outcomes_followup_actions_counts(
+        &self,
+        outcome_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, i64>, StorageError> {
+        if outcome_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders = outcome_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT outcome_id, COUNT(*) as cnt FROM research_followup_actions WHERE outcome_id IN ({placeholders}) GROUP BY outcome_id"
+        );
+        let mut q = sqlx::query_as::<_, (i64, i64)>(&sql);
+        for id in outcome_ids {
+            q = q.bind(id);
+        }
+        let rows: Vec<(i64, i64)> = q.fetch_all(&self.pool).await?;
+        let mut map: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+        for (oid, cnt) in rows {
+            map.insert(oid, cnt);
+        }
+        for id in outcome_ids {
+            map.entry(*id).or_insert(0);
+        }
+        Ok(map)
+    }
+
+    pub async fn update_followup_action(
+        &self,
+        id: i64,
+        status: Option<&str>,
+        notes: Option<Option<&str>>,
+    ) -> Result<ResearchFollowupActionRow, StorageError> {
+        let existing = self
+            .get_followup_action(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("followup_action {id} not found")))?;
+        let new_status = status.unwrap_or(&existing.status).to_string();
+        let valid = ["OPEN", "COMPLETED", "SKIPPED"];
+        if !valid.contains(&new_status.as_str()) {
+            return Err(StorageError::Import(format!("invalid status {new_status}")));
+        }
+        // notes handling: Some(Some(v)) => set, Some(None) => set null, None => keep existing
+        let new_notes = match notes {
+            Some(inner) => inner.map(|s| s.to_string()),
+            None => existing.notes.clone(),
+        };
+        let now = crate::models::now_iso();
+        let completed_at = match new_status.as_str() {
+            "COMPLETED" | "SKIPPED" => {
+                if existing.completed_at.is_some() && existing.status == new_status {
+                    existing.completed_at.clone()
+                } else {
+                    Some(now.clone())
+                }
+            }
+            "OPEN" => None,
+            _ => existing.completed_at.clone(),
+        };
+        // if status stays same but was already completed, keep original completed_at unless transitioning to OPEN
+        // above logic handles: if already completed and same status, keep
+        sqlx::query(
+            "UPDATE research_followup_actions SET status=?1, notes=?2, updated_at=?3, completed_at=?4 WHERE id=?5",
+        )
+        .bind(&new_status)
+        .bind(&new_notes)
+        .bind(&now)
+        .bind(&completed_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_followup_action(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_followup_action(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_followup_actions WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn count_followup_actions_by_status(
+        &self,
+        tree_id: i64,
+    ) -> Result<std::collections::HashMap<String, i64>, StorageError> {
+        let rows: Vec<(String, i64)> = sqlx::query_as(
+            "SELECT status, COUNT(*) FROM research_followup_actions WHERE tree_id=?1 GROUP BY status",
+        )
+        .bind(tree_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut map = std::collections::HashMap::new();
+        for (s, c) in rows {
+            map.insert(s, c);
+        }
+        Ok(map)
     }
 }

@@ -52,6 +52,7 @@ Tablas principales (con `tree_id` como límite de aislamiento):
 - `research_citations(id, source_id FK CASCADE, locator, text, created_at, updated_at)`
 - `evidence(id, tree_id FK CASCADE, source_id FK CASCADE, citation_id FK SET NULL, statement, notes, created_at, updated_at)`
 - `outcome_evidence(outcome_id FK CASCADE, evidence_id FK CASCADE, relationship CHECK(SUPPORTS|CONTRADICTS), PK(outcome_id,evidence_id))`
+- `research_followup_actions(id, tree_id FK CASCADE, task_id FK CASCADE, outcome_id FK CASCADE, followup_code CHECK(5), status CHECK(OPEN/COMPLETED/SKIPPED), notes, created_at, updated_at, completed_at)` — ver `docs/RESEARCH_FOLLOWUP_ACTIONS.md`
 
 ### Foreign keys
 
@@ -81,6 +82,7 @@ research_sources(tree_id) (type)
 research_citations(source_id)
 evidence(tree_id) (source_id) (citation_id)
 outcome_evidence(outcome_id) (evidence_id)
+research_followup_actions(tree_id) (task_id) (outcome_id) (status) (followup_code) (updated_at)
 ```
 
 ### Raw tags
@@ -121,10 +123,11 @@ create_research_task, get_research_task, list_research_tasks, update_research_ta
 create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome,
 create_research_source, get_research_source, list_research_sources, update_research_source, delete_research_source,
 create_research_citation, get_research_citation, list_research_citations, update_research_citation, delete_research_citation,
-  create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
-   attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
-   get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments, get_outcome_gaps, get_outcomes_gaps, get_outcome_followups, get_outcomes_followups (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment` / `calculate_evidence_gaps` / `calculate_research_followups`),
-   research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info} + research_followups {high,medium,low})
+   create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
+    attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
+    get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments, get_outcome_gaps, get_outcomes_gaps, get_outcome_followups, get_outcomes_followups (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment` / `calculate_evidence_gaps` / `calculate_research_followups`),
+    create_followup_action, get_followup_action, list_followup_actions, list_task_followup_actions, list_outcome_followup_actions, get_outcomes_followup_actions_counts, update_followup_action, delete_followup_action, count_followup_actions_by_status,
+    research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info} + research_followups {high,medium,low} + followup_actions {open,completed,skipped})
 ```
 
 Paginación: `limit/offset` en listados para preparar futura API HTTP sin rediseñar acceso a datos.

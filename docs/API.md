@@ -215,6 +215,28 @@ GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,e
 
 Ver `docs/RESEARCH_FOLLOWUPS.md` para `Gap → Follow-up`, prioridades y qué NO es un Follow-up.
 
+## Research Follow-up Actions — Fase 4.4
+
+```
+POST /api/v1/trees/1/research-outcomes/5/followup-actions {followup_code, notes} → 201 {id,tree_id,task_id,outcome_id,followup_code,status:OPEN,notes,created_at,updated_at,completed_at:null} | 422 FOLLOWUP_NOT_ACTIVE
+GET  /api/v1/trees/1/research-followup-actions?task_id=3&outcome_id=5&status=OPEN&followup_code=REVIEW_CONTRADICTION&limit=20 → Paginated
+GET  /api/v1/trees/1/research-followup-actions/42 → {id,...,status,notes,completed_at}
+PATCH /api/v1/trees/1/research-followup-actions/42 {status, notes} → 200 | 400 INVALID_FOLLOWUP_ACTION_STATUS
+DELETE /api/v1/trees/1/research-followup-actions/42 → 204
+GET  /api/v1/trees/1/research-tasks/3/followup-actions → Paginated
+GET  /api/v1/trees/1/research-outcomes/5/followup-actions → {items:[...]}
+GET  /api/v1/trees/1/research-outcomes/5 → {evidence,evidence_assessment,evidence_gaps,research_followups,followup_actions:[...]}
+GET  /api/v1/trees/1/research-outcomes?limit=20 → items[].followup_actions_count (GROUP BY sin N+1)
+GET  /api/v1/trees/1/research/summary → {followup_actions:{open,completed,skipped}}
+```
+
+- `followup_code` ∈ 5, `status` ∈ OPEN/COMPLETED/SKIPPED, `FOLLOWUP_NOT_ACTIVE` si el código no está activo para el outcome actual.
+- `completed_at` se establece en `COMPLETED`/`SKIPPED` y se limpia en `OPEN`.
+- `GET /research-outcomes/:id` incluye `followup_actions` históricas ordenadas `updated_at DESC`; list incluye `followup_actions_count`.
+- Tree isolation: `task.tree_id==outcome.tree_id==action.tree_id`, cross-tree → 404.
+
+Ver `docs/RESEARCH_FOLLOWUP_ACTIONS.md` para `Gap → Follow-up → Action` y `Action completed ≠ Gap resolved`.
+
 ## Errores
 
 ```json

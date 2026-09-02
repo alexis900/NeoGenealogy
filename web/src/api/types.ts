@@ -106,6 +106,14 @@ export interface ResearchOutcome {
   evidence_assessment?: EvidenceAssessment | null;
   evidence_gaps?: EvidenceGap[];
   research_followups?: ResearchFollowUp[];
+  followup_actions?: ResearchFollowupAction[];
+  followup_actions_count?: number;
+}
+
+export type FollowupActionStatus = "OPEN" | "COMPLETED" | "SKIPPED";
+export interface ResearchFollowupAction {
+  id:number; tree_id:number; task_id:number; outcome_id:number; followup_code:FollowUpCode; status:FollowupActionStatus; notes?:string|null;
+  created_at:string; updated_at:string; completed_at?:string|null;
 }
 
 export type SourceType = "BOOK"|"REGISTER"|"CENSUS"|"CIVIL_RECORD"|"PARISH_RECORD"|"NEWSPAPER"|"WEBSITE"|"OTHER";

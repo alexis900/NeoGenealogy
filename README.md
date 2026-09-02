@@ -1,6 +1,6 @@
-# NeoGenealogy v0.4.3 — Research Follow-ups
+# NeoGenealogy v0.4.4 — Research Follow-up Actions
 
-Herramienta local de análisis genealógico. Release v0.4.3 añade Research Follow-ups (`Outcome → Evidence → Assessment → Gaps → Follow-ups`). Fase 4.2 cerraba Evidence Gaps.
+Herramienta local de análisis genealógico. Release v0.4.4 añade Research Follow-up Actions (`Outcome → Evidence → Assessment → Gaps → Follow-ups → Actions`). Fase 4.3 cerraba Follow-ups.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
@@ -10,6 +10,7 @@ WHAT SUPPORTS THAT CONCLUSION → Evidence (SUPPORTS/CONTRADICTS) → Source + C
 HOW WELL IT IS SUPPORTED     → Evidence Assessment (score/status/reasons)
 WHAT IS MISSING              → Evidence Gaps (CRITICAL/WARNING/INFO)
 WHAT TO DO NEXT (GENERIC)    → Research Follow-ups (HIGH/MEDIUM/LOW)
+WHAT WAS DONE                → Follow-up Actions (OPEN/COMPLETED/SKIPPED)
 ```
 
 ```
@@ -51,12 +52,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004)
-- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups, OpenAPI)
+- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005)
+- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, OpenAPI)
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
-- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome + Follow-ups integration)
+- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome + Follow-ups/Actions integration)
 
-Véase `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+Véase `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -71,8 +72,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Evidence), `/trees/:treeId/research/history` (filtros assessment/gap), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
-Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups` — ver `docs/RESEARCH_FOLLOWUPS.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence), `/trees/:treeId/research/history` (filtros assessment/gap), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED]` — ver `docs/RESEARCH_FOLLOWUP_ACTIONS.md`.
 
 ## API REST
 

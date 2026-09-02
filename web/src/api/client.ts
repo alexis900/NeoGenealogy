@@ -108,7 +108,31 @@ export const api = {
   createOutcome: (treeId:number, taskId:number, body:{type:string;summary:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/outcome`,{method:"POST", body:JSON.stringify(body)}),
   updateOutcome: (treeId:number, outcomeId:number, body:{type?:string;summary?:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteOutcome: (treeId:number, outcomeId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"DELETE"}),
-  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}; sources?:{total:number}; evidence?:{total:number;supporting:number;contradicting:number}; assessment?:{no_evidence:number;weak:number;mixed:number;supported:number;strongly_supported:number}; evidence_gaps?:{critical:number;warning:number;info:number}; research_followups?:{high:number;medium:number;low:number}}>(`/api/v1/trees/${treeId}/research/summary`),
+  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}; sources?:{total:number}; evidence?:{total:number;supporting:number;contradicting:number}; assessment?:{no_evidence:number;weak:number;mixed:number;supported:number;strongly_supported:number}; evidence_gaps?:{critical:number;warning:number;info:number}; research_followups?:{high:number;medium:number;low:number}; followup_actions?:{open:number;completed:number;skipped:number}}>(`/api/v1/trees/${treeId}/research/summary`),
+  // Followup Actions
+  getFollowupActions: (treeId:number, params?:{task_id?:number;outcome_id?:number;status?:string;followup_code?:string;limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.task_id!==undefined) q.set("task_id",String(params.task_id));
+    if(params?.outcome_id!==undefined) q.set("outcome_id",String(params.outcome_id));
+    if(params?.status) q.set("status",params.status);
+    if(params?.followup_code) q.set("followup_code",params.followup_code);
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchFollowupAction>>(`/api/v1/trees/${treeId}/research-followup-actions${s}`);
+  },
+  getFollowupAction: (treeId:number, actionId:number)=> req<import("./types").ResearchFollowupAction>(`/api/v1/trees/${treeId}/research-followup-actions/${actionId}`),
+  createFollowupAction: (treeId:number, outcomeId:number, body:{followup_code:string;notes?:string})=> req<import("./types").ResearchFollowupAction>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/followup-actions`,{method:"POST", body:JSON.stringify(body)}),
+  updateFollowupAction: (treeId:number, actionId:number, body:{status?:string;notes?:string})=> req<import("./types").ResearchFollowupAction>(`/api/v1/trees/${treeId}/research-followup-actions/${actionId}`,{method:"PATCH", body:JSON.stringify(body)}),
+  deleteFollowupAction: (treeId:number, actionId:number)=> req<void>(`/api/v1/trees/${treeId}/research-followup-actions/${actionId}`,{method:"DELETE"}),
+  getTaskFollowupActions: (treeId:number, taskId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchFollowupAction>>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/followup-actions${s}`);
+  },
+  getOutcomeFollowupActions: (treeId:number, outcomeId:number)=> req<{items: import("./types").ResearchFollowupAction[]}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/followup-actions`),
   // Sources
   getSources: (treeId:number, params?:{type?:string;limit?:number;offset?:number})=>{
     const q=new URLSearchParams();
