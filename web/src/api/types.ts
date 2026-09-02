@@ -63,6 +63,8 @@ export interface ResearchTask {
   title:string; description?:string|null; status:TaskStatus;
   created_at:string; updated_at:string; started_at?:string|null; completed_at?:string|null; resolution?:string|null;
   outcome?: ResearchOutcome | null;
+  has_outcome?: boolean;
+  opportunity?: { id:number; score?:number; priority?:string; why?:string } | null;
 }
 
 export type OutcomeType = "CONFIRMED" | "FALSE_LEAD" | "INCONCLUSIVE" | "NEW_LEAD" | "NO_EVIDENCE";

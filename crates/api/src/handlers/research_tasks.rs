@@ -16,6 +16,7 @@ pub struct TaskListParams {
     pub status: Option<String>,
     pub person_id: Option<i64>,
     pub opportunity_id: Option<i64>,
+    pub has_outcome: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -53,6 +54,7 @@ fn validate_status(s: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn to_json(row: neogenealogy_storage::models::ResearchTaskRow) -> serde_json::Value {
     serde_json::json!({
         "id": row.id,
@@ -67,7 +69,32 @@ fn to_json(row: neogenealogy_storage::models::ResearchTaskRow) -> serde_json::Va
         "started_at": row.started_at,
         "completed_at": row.completed_at,
         "resolution": row.resolution,
-        "outcome": null
+        "outcome": null,
+        "has_outcome": false
+    })
+}
+
+fn to_json_with_has_outcome(
+    row: neogenealogy_storage::models::ResearchTaskRow,
+    has_outcome: bool,
+    opportunity: Option<serde_json::Value>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": row.id,
+        "tree_id": row.tree_id,
+        "opportunity_id": row.opportunity_id,
+        "person_id": row.person_id,
+        "title": row.title,
+        "description": row.description,
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "started_at": row.started_at,
+        "completed_at": row.completed_at,
+        "resolution": row.resolution,
+        "outcome": null,
+        "has_outcome": has_outcome,
+        "opportunity": opportunity
     })
 }
 
@@ -138,16 +165,56 @@ pub async fn list_tasks(
     let status = params.status.as_deref().map(|s| s.to_uppercase());
     let (rows, total) = state
         .storage
-        .list_research_tasks(
+        .list_research_tasks_filtered(
             tree_id,
             status.as_deref(),
             params.person_id,
             params.opportunity_id,
+            params.has_outcome,
             limit,
             offset,
         )
         .await?;
-    let items = rows.into_iter().map(to_json).collect();
+    // Batch fetch has_outcome and opportunity info to avoid N+1
+    let task_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let has_map = state.storage.get_tasks_has_outcome_map(&task_ids).await?;
+    let opp_ids: Vec<i64> = rows.iter().filter_map(|r| r.opportunity_id).collect();
+    let mut opp_map: std::collections::HashMap<i64, serde_json::Value> =
+        std::collections::HashMap::new();
+    if !opp_ids.is_empty() {
+        let placeholders = opp_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT * FROM research_opportunities WHERE id IN ({placeholders}) AND tree_id=?"
+        );
+        let mut q = sqlx::query_as::<_, neogenealogy_storage::models::ResearchOpportunityRow>(&sql);
+        for oid in &opp_ids {
+            q = q.bind(oid);
+        }
+        q = q.bind(tree_id);
+        if let Ok(opps) = q.fetch_all(&state.storage.pool).await {
+            for o in opps {
+                opp_map.insert(
+                    o.id,
+                    serde_json::json!({
+                        "id": o.id,
+                        "score": o.score,
+                        "priority": o.priority,
+                        "why": o.why
+                    }),
+                );
+            }
+        }
+    }
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|row| {
+            let has = has_map.get(&row.id).copied().unwrap_or(false);
+            let opp = row
+                .opportunity_id
+                .and_then(|oid| opp_map.get(&oid).cloned());
+            to_json_with_has_outcome(row, has, opp)
+        })
+        .collect();
     Ok(Json(Paginated {
         items,
         pagination: PaginationMeta {

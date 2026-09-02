@@ -47,6 +47,14 @@ export default function ResearchTaskDetail(){
     try{
       const updated=await api.updateTask(tid,id,{title:editTitle, description:editDesc, status:editStatus, resolution:editResolution||undefined});
       setTask(updated);
+      setEditStatus(updated.status); setEditResolution(updated.resolution||"");
+    }catch(e:any){setErr(e.message)} finally{setSaving(false)}
+  };
+  const quickStatus=async(status:string)=>{
+    setSaving(true);
+    try{
+      const updated=await api.updateTask(tid,id,{status});
+      setTask(updated); setEditStatus(updated.status);
     }catch(e:any){setErr(e.message)} finally{setSaving(false)}
   };
   const remove=async()=>{
@@ -83,10 +91,21 @@ export default function ResearchTaskDetail(){
   return <div className="space-y-6">
     <Link to={`/trees/${tid}/research/tasks`} className="text-sm text-blue-600 underline">← Research Tasks</Link>
     <div className="flex justify-between items-start gap-4">
-      <h1 className="text-2xl font-bold">{task.title}</h1>
+      <h1 className="text-2xl font-bold">Research Task: {task.title}</h1>
       <TaskStatusBadge status={task.status} />
     </div>
+    {/* Workflow actions */}
+    <div className="border rounded p-3 bg-gray-50 flex gap-2 flex-wrap">
+      {task.status==="OPEN" && <button onClick={()=>quickStatus("IN_PROGRESS")} className="px-3 py-1 bg-emerald-600 text-white rounded">Start Research</button>}
+      {task.status==="IN_PROGRESS" && <>
+        <button onClick={()=>quickStatus("RESOLVED")} className="px-3 py-1 bg-blue-600 text-white rounded">Mark Resolved</button>
+        <button onClick={()=>quickStatus("REJECTED")} className="px-3 py-1 bg-red-600 text-white rounded">Mark Rejected</button>
+        <button onClick={()=>quickStatus("INCONCLUSIVE")} className="px-3 py-1 bg-yellow-600 text-white rounded">Mark Inconclusive</button>
+      </>}
+      {(task.status==="RESOLVED"||task.status==="REJECTED"||task.status==="INCONCLUSIVE") && <span className="text-sm text-gray-600">Completed — you can edit outcome below</span>}
+    </div>
     <div className="grid gap-4 border rounded p-4 bg-white">
+      <div className="text-xs font-semibold text-gray-500">Research Task — What you decided to investigate</div>
       <label className="block"><span className="text-sm font-semibold">Title</span><input value={editTitle} onChange={e=>setEditTitle(e.target.value)} className="w-full border rounded px-2 py-1 mt-1" /></label>
       <label className="block"><span className="text-sm font-semibold">Description</span><textarea value={editDesc} onChange={e=>setEditDesc(e.target.value)} className="w-full border rounded px-2 py-1 mt-1" rows={3} /></label>
       <label className="block"><span className="text-sm font-semibold">Status</span>
@@ -104,6 +123,7 @@ export default function ResearchTaskDetail(){
     </div>
 
     <div className="border rounded p-4 bg-white">
+      <div className="text-xs font-semibold text-gray-500 mb-1">Research Outcome — What you discovered</div>
       <h3 className="font-semibold mb-2">Research Outcome</h3>
       {task.outcome ? (
         <div className="space-y-3">
@@ -136,15 +156,21 @@ export default function ResearchTaskDetail(){
       )}
     </div>
 
-    <div className="text-xs text-gray-600 space-y-1">
-      <div>Created: {new Date(task.created_at).toLocaleString()}</div>
-      <div>Updated: {new Date(task.updated_at).toLocaleString()}</div>
-      <div>Started: {task.started_at? new Date(task.started_at).toLocaleString():"—"}</div>
-      <div>Completed: {task.completed_at? new Date(task.completed_at).toLocaleString():"—"}</div>
-      <div>Person: {task.person_id? <Link to={`/trees/${tid}/persons/${task.person_id}`} className="text-blue-600 underline">{task.person_id}</Link>:"—"}</div>
+    <div className="border rounded p-4 bg-white">
+      <div className="text-xs font-semibold text-gray-500">Research Task — Status / Person / Dates</div>
+      <div className="text-xs text-gray-600 space-y-1 mt-2">
+        <div>Status: {task.status}</div>
+        <div>Person: {task.person_id? <Link to={`/trees/${tid}/persons/${task.person_id}`} className="text-blue-600 underline">{task.person_id}</Link>:"—"}</div>
+        <div>Description: {task.description || "—"}</div>
+        <div>Created: {new Date(task.created_at).toLocaleString()}</div>
+        <div>Updated: {new Date(task.updated_at).toLocaleString()}</div>
+        <div>Started: {task.started_at? new Date(task.started_at).toLocaleString():"—"}</div>
+        <div>Completed: {task.completed_at? new Date(task.completed_at).toLocaleString():"—"}</div>
+      </div>
     </div>
     {opp && <div className="border rounded p-4 bg-gray-50">
-      <h3 className="font-semibold mb-2">Original Research Opportunity</h3>
+      <div className="text-xs font-semibold text-gray-500">Original Opportunity — What the system found</div>
+      <h3 className="font-semibold mb-2 mt-1">Original Research Opportunity</h3>
       <div className="flex gap-2 items-center"><PriorityBadge p={opp.priority} /><ScoreBadge score={opp.score} /></div>
       <div className="text-sm mt-2"><strong>Why:</strong> {opp.why}</div>
       <div className="text-sm"><strong>What:</strong> {JSON.stringify(opp.what)}</div>

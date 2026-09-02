@@ -1,0 +1,109 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { api } from "../api/client";
+import { Loading, ErrorState, Empty } from "../components/common";
+import { TaskStatusBadge } from "../components/Badges";
+
+function formatOutcomeType(t:string){
+  const map:any={"CONFIRMED":"Confirmed","FALSE_LEAD":"False lead","INCONCLUSIVE":"Inconclusive","NEW_LEAD":"New lead","NO_EVIDENCE":"No evidence"};
+  return map[t]||t;
+}
+
+export default function ResearchWorkspace(){
+  const {treeId}=useParams(); const id=Number(treeId);
+  const [summary,setSummary]=useState<any>(null);
+  const [activeTasks,setActiveTasks]=useState<any[]>([]);
+  const [recentOutcomes,setRecentOutcomes]=useState<any[]>([]);
+  const [oppsCounts,setOppsCounts]=useState<{high:number;medium:number;low:number}|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState<string|null>(null);
+
+  const load=async()=>{
+    setLoading(true); setErr(null);
+    try{
+      const s=await api.getResearchSummary(id);
+      setSummary(s);
+      setOppsCounts(s.opportunities);
+      // active tasks: IN_PROGRESS first then OPEN, limit 5
+      // fetch IN_PROGRESS and OPEN separately or combined with ordering backend does
+      const tasksRes=await api.getTasks(id,{limit:5});
+      // backend orders IN_PROGRESS first, then OPEN, then rest by updated_at
+      // filter to only OPEN and IN_PROGRESS for the block
+      const active=tasksRes.items.filter((t:any)=> t.status==="IN_PROGRESS"||t.status==="OPEN").slice(0,5);
+      // if still less, just show what we have
+      setActiveTasks(active);
+      const outcomes=await api.getOutcomes(id,{limit:5});
+      setRecentOutcomes(outcomes.items);
+    }catch(e:any){setErr(e.message)} finally{setLoading(false)}
+  };
+  useEffect(()=>{load()},[id]);
+
+  if(loading) return <Loading msg="Loading research workspace…" />;
+  if(err) return <ErrorState msg={err} onRetry={load} />;
+
+  return <div className="space-y-6">
+    <h1 className="text-2xl font-bold">Research</h1>
+    <p className="text-sm text-gray-600">Your research workspace — what deserves investigation, what you are working on, and what you have discovered.</p>
+    <nav className="flex gap-2 text-sm">
+      <Link to={`/trees/${id}/research`} className="px-3 py-1 bg-gray-800 text-white rounded">Overview</Link>
+      <Link to={`/trees/${id}/research/opportunities`} className="px-3 py-1 border rounded hover:bg-gray-50">Opportunities</Link>
+      <Link to={`/trees/${id}/research/tasks`} className="px-3 py-1 border rounded hover:bg-gray-50">Tasks</Link>
+      <Link to={`/trees/${id}/research/history`} className="px-3 py-1 border rounded hover:bg-gray-50">History</Link>
+    </nav>
+
+    {/* Opportunities block */}
+    <div className="border rounded p-4 bg-white">
+      <h2 className="font-semibold mb-2">Opportunities</h2>
+      {oppsCounts ? <div className="flex gap-4 text-sm">
+        <span>High priority: <strong>{oppsCounts.high}</strong></span>
+        <span>Medium priority: <strong>{oppsCounts.medium}</strong></span>
+        <span>Low priority: <strong>{oppsCounts.low}</strong></span>
+      </div> : <div className="text-sm text-gray-500">No opportunities data</div>}
+      <div className="text-sm text-gray-600 mt-1">Automatically detected research opportunities</div>
+      <Link to={`/trees/${id}/research/opportunities`} className="text-sm text-blue-600 underline mt-2 inline-block">View Research Queue →</Link>
+    </div>
+
+    {/* Active Tasks block */}
+    <div className="border rounded p-4 bg-white">
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="font-semibold">Active Tasks</h2>
+        <Link to={`/trees/${id}/research/tasks`} className="text-sm text-blue-600 underline">View all tasks</Link>
+      </div>
+      {summary && <div className="text-xs text-gray-600 mb-2">Open {summary.tasks.open} · In Progress {summary.tasks.in_progress}</div>}
+      {activeTasks.length===0 ? <Empty msg="No research tasks yet. Start from a research opportunity to begin an investigation." />
+        : <div className="space-y-2">
+          {activeTasks.map((t:any)=><Link key={t.id} to={`/trees/${id}/research/tasks/${t.id}`} className="block border rounded p-3 hover:bg-gray-50">
+            <div className="flex justify-between items-start gap-2">
+              <span className="font-semibold text-sm">{t.title}</span>
+              <TaskStatusBadge status={t.status} />
+            </div>
+            <div className="text-xs text-gray-600 mt-1">Person {t.person_id ?? "—"} · Updated {new Date(t.updated_at).toLocaleDateString()} · {t.has_outcome ? "Outcome recorded" : "Not recorded"}</div>
+            {t.opportunity && <div className="text-xs text-gray-500 mt-1">From Opportunity Score: {t.opportunity.score} Priority: {t.opportunity.priority}</div>}
+            <div className="text-xs mt-1">
+              {t.status==="IN_PROGRESS" ? <span className="text-blue-600">Continue Research →</span> : t.status==="OPEN" ? <span className="text-emerald-600">Start Research →</span> : null}
+            </div>
+          </Link>)}
+        </div>}
+    </div>
+
+    {/* Recent Outcomes block */}
+    <div className="border rounded p-4 bg-white">
+      <div className="flex justify-between items-center mb-2">
+        <h2 className="font-semibold">Recent Outcomes</h2>
+        <Link to={`/trees/${id}/research/history`} className="text-sm text-blue-600 underline">View research history</Link>
+      </div>
+      {recentOutcomes.length===0 ? <Empty msg="No research history yet. Completed investigations will appear here." />
+        : <div className="space-y-2">
+          {recentOutcomes.map((o:any)=><Link key={o.id} to={`/trees/${id}/research/tasks/${o.task_id}`} className="block border rounded p-3 hover:bg-gray-50">
+            <div className="flex gap-2 items-center">
+              <span className="px-2 py-1 bg-emerald-100 rounded text-xs font-semibold">{formatOutcomeType(o.type)}</span>
+              <span className="text-xs text-gray-600">{new Date(o.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="text-sm font-medium mt-1">{o.summary}</div>
+            <div className="text-xs text-gray-600">Task {o.task_id} · Person linkage via task</div>
+            <div className="text-xs text-blue-600 mt-1">View Result →</div>
+          </Link>)}
+        </div>}
+    </div>
+  </div>
+}

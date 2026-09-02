@@ -66,12 +66,12 @@ beforeEach(() => {
 test("shows loading then task", async () => {
   renderDetail();
   expect(screen.getByText(/Loading task/)).toBeInTheDocument();
-  expect(await screen.findByText("Find parents")).toBeInTheDocument();
+  expect(await screen.findByText(/Find parents/)).toBeInTheDocument();
 });
 
 test("task without outcome shows Record Outcome", async () => {
   renderDetail({ outcome: null });
-  expect(await screen.findByText("Find parents")).toBeInTheDocument();
+  expect(await screen.findByText(/Find parents/)).toBeInTheDocument();
   expect(screen.getByText("No research outcome recorded yet.")).toBeInTheDocument();
   expect(screen.getByText("Record Outcome")).toBeInTheDocument();
   // edit outcome section should not be shown
@@ -81,7 +81,7 @@ test("task without outcome shows Record Outcome", async () => {
 test("create outcome - type/summary/details and show after", async () => {
   const user = userEvent.setup();
   renderDetail({ outcome: null });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   // type select default is CONFIRMED
   const typeSelect = screen.getAllByDisplayValue("Confirmed")[0];
   await user.selectOptions(typeSelect, "NEW_LEAD");
@@ -131,7 +131,7 @@ test("edit outcome - modify type/summary/details", async () => {
     updated_at: new Date().toISOString(),
   };
   renderDetail({ outcome: existingOutcome });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   expect(screen.getByText("initial summary")).toBeInTheDocument();
   expect(screen.getByText("Edit Outcome")).toBeInTheDocument();
   // Should not show Record Outcome button
@@ -180,7 +180,7 @@ test("delete outcome shows Record Outcome again", async () => {
     updated_at: new Date().toISOString(),
   };
   renderDetail({ outcome: existingOutcome });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   expect(screen.getByText("to delete")).toBeInTheDocument();
 
   await user.click(screen.getByText("Delete Outcome"));
@@ -194,7 +194,7 @@ test("delete outcome shows Record Outcome again", async () => {
 test("all five outcome types render and selectable", async () => {
   const user = userEvent.setup();
   renderDetail({ outcome: null });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   const typeSelect = screen.getAllByDisplayValue("Confirmed")[0];
   const options = Array.from(typeSelect.querySelectorAll("option")).map(o => o.value);
   expect(options).toEqual(["CONFIRMED", "FALSE_LEAD", "INCONCLUSIVE", "NEW_LEAD", "NO_EVIDENCE"]);
@@ -220,7 +220,7 @@ test("existing outcome does not show duplicate creation form", async () => {
     updated_at: new Date().toISOString(),
   };
   renderDetail({ outcome: existingOutcome });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   expect(screen.getByText("existing")).toBeInTheDocument();
   // Only one Record Outcome scenario, now should show Edit Outcome not second Record
   expect(screen.queryByText("No research outcome recorded yet.")).not.toBeInTheDocument();
@@ -241,7 +241,7 @@ test("Original Opportunity remains visible after create and update", async () =>
     breakdown: { total: 85, components: [{ name: "x", points: 10, reason: "y" }] }
   };
   renderDetail({ outcome: null, opportunity_id: 5 }, opp);
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   expect(screen.getByText("Original Research Opportunity")).toBeInTheDocument();
   expect(screen.getByText("missing birth date")).toBeInTheDocument();
 
@@ -281,7 +281,7 @@ test("shows error state when API fails", async () => {
 
 test("empty no outcome has disabled Record button when summary empty", async () => {
   renderDetail({ outcome: null });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   const btn = screen.getByText("Record Outcome") as HTMLButtonElement;
   expect(btn.disabled).toBe(true);
 });
@@ -289,7 +289,7 @@ test("empty no outcome has disabled Record button when summary empty", async () 
 test("Record Outcome enabled when summary filled", async () => {
   const user = userEvent.setup();
   renderDetail({ outcome: null });
-  await screen.findByText("Find parents");
+  await screen.findByText(/Find parents/);
   const input = screen.getByPlaceholderText("Summary (required)");
   await user.type(input, "non-empty");
   const btn = screen.getByText("Record Outcome") as HTMLButtonElement;

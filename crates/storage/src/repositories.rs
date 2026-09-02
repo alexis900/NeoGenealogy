@@ -493,6 +493,29 @@ impl Storage {
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<ResearchTaskRow>, i64), StorageError> {
+        self.list_research_tasks_filtered(
+            tree_id,
+            status,
+            person_id,
+            opportunity_id,
+            None,
+            limit,
+            offset,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn list_research_tasks_filtered(
+        &self,
+        tree_id: i64,
+        status: Option<&str>,
+        person_id: Option<i64>,
+        opportunity_id: Option<i64>,
+        has_outcome: Option<bool>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchTaskRow>, i64), StorageError> {
         let mut sql = "SELECT * FROM research_tasks WHERE tree_id = ?".to_string();
         let mut count_sql = "SELECT COUNT(*) FROM research_tasks WHERE tree_id = ?".to_string();
         if status.is_some() {
@@ -507,7 +530,16 @@ impl Storage {
             sql.push_str(" AND opportunity_id = ?");
             count_sql.push_str(" AND opportunity_id = ?");
         }
-        sql.push_str(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
+        if let Some(has) = has_outcome {
+            if has {
+                sql.push_str(" AND EXISTS (SELECT 1 FROM research_outcomes WHERE research_outcomes.task_id = research_tasks.id)");
+                count_sql.push_str(" AND EXISTS (SELECT 1 FROM research_outcomes WHERE research_outcomes.task_id = research_tasks.id)");
+            } else {
+                sql.push_str(" AND NOT EXISTS (SELECT 1 FROM research_outcomes WHERE research_outcomes.task_id = research_tasks.id)");
+                count_sql.push_str(" AND NOT EXISTS (SELECT 1 FROM research_outcomes WHERE research_outcomes.task_id = research_tasks.id)");
+            }
+        }
+        sql.push_str(" ORDER BY CASE status WHEN 'IN_PROGRESS' THEN 0 WHEN 'OPEN' THEN 1 ELSE 2 END, updated_at DESC LIMIT ? OFFSET ?");
         let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
         let mut q = sqlx::query_as::<_, ResearchTaskRow>(&sql).bind(tree_id);
         if let Some(s) = status {
@@ -526,6 +558,90 @@ impl Storage {
         q = q.bind(limit).bind(offset);
         let rows = q.fetch_all(&self.pool).await?;
         Ok((rows, total))
+    }
+
+    pub async fn get_tasks_has_outcome_map(
+        &self,
+        task_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, bool>, StorageError> {
+        if task_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders = task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql =
+            format!("SELECT task_id FROM research_outcomes WHERE task_id IN ({placeholders})");
+        let mut q = sqlx::query_scalar::<_, i64>(&sql);
+        for id in task_ids {
+            q = q.bind(id);
+        }
+        let with_outcome = q.fetch_all(&self.pool).await?;
+        let set: std::collections::HashSet<i64> = with_outcome.into_iter().collect();
+        let mut map = std::collections::HashMap::new();
+        for id in task_ids {
+            map.insert(*id, set.contains(id));
+        }
+        Ok(map)
+    }
+
+    pub async fn research_summary(&self, tree_id: i64) -> Result<serde_json::Value, StorageError> {
+        let opp_high: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_opportunities WHERE tree_id=?1 AND lower(priority)='high'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let opp_medium: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_opportunities WHERE tree_id=?1 AND lower(priority)='medium'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let opp_low: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_opportunities WHERE tree_id=?1 AND lower(priority)='low'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let task_open: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_tasks WHERE tree_id=?1 AND status='OPEN'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let task_in_progress: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_tasks WHERE tree_id=?1 AND status='IN_PROGRESS'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let task_resolved: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_tasks WHERE tree_id=?1 AND status='RESOLVED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let task_rejected: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_tasks WHERE tree_id=?1 AND status='REJECTED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let task_inconclusive: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_tasks WHERE tree_id=?1 AND status='INCONCLUSIVE'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await?;
+        let outcomes_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(serde_json::json!({
+            "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
+            "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
+            "outcomes": { "total": outcomes_total }
+        }))
     }
 
     pub async fn update_research_task(
@@ -717,7 +833,7 @@ impl Storage {
             sql.push_str(" AND ro.task_id = ?");
             count_sql.push_str(" AND ro.task_id = ?");
         }
-        sql.push_str(" ORDER BY ro.updated_at DESC LIMIT ? OFFSET ?");
+        sql.push_str(" ORDER BY ro.created_at DESC LIMIT ? OFFSET ?");
         let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
         let mut q = sqlx::query_as::<_, ResearchOutcomeRow>(&sql).bind(tree_id);
         if let Some(t) = outcome_type {
@@ -750,7 +866,7 @@ impl Storage {
                 sql.push_str(" AND ro.type = ?");
                 count_sql.push_str(" AND ro.type = ?");
             }
-            sql.push_str(" ORDER BY ro.updated_at DESC LIMIT ? OFFSET ?");
+            sql.push_str(" ORDER BY ro.created_at DESC LIMIT ? OFFSET ?");
             let mut cq = sqlx::query_scalar::<_, i64>(&count_sql)
                 .bind(tree_id)
                 .bind(pid);

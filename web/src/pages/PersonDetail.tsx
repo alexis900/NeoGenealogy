@@ -6,7 +6,7 @@ import { FindingBadge, TaskStatusBadge } from "../components/Badges";
 
 export default function PersonDetail(){
   const {treeId, personId}=useParams(); const tid=Number(treeId); const pid=Number(personId);
-  const [person,setPerson]=useState<any>(null); const [findings,setFindings]=useState<any[]>([]); const [opps,setOpps]=useState<any[]>([]); const [tasks,setTasks]=useState<any[]>([]); const [err,setErr]=useState<string|null>(null);
+  const [person,setPerson]=useState<any>(null); const [findings,setFindings]=useState<any[]>([]); const [opps,setOpps]=useState<any[]>([]); const [tasks,setTasks]=useState<any[]>([]); const [err,setErr]=useState<string|null>(null); const [creating,setCreating]=useState(false);
   useEffect(()=>{
     (async()=>{
       try{
@@ -19,11 +19,19 @@ export default function PersonDetail(){
       }catch(e:any){setErr(e.message)}
     })();
   },[tid,pid]);
+  const researchThisPerson=async()=>{
+    setCreating(true);
+    try{
+      const t=await api.createTask(tid,{title:`Research: ${person.display_name||person.gedcom_id}`, person_id:pid});
+      window.location.href=`/trees/${tid}/research/tasks/${t.id}`;
+    }catch(e:any){setErr(e.message)} finally{setCreating(false)}
+  };
   if(err) return <ErrorState msg={err} />;
   if(!person) return <Loading msg="Loading person…" />;
   return <div className="space-y-6">
     <h1 className="text-2xl font-bold">{person.display_name || `${person.given_name||""} ${person.surname||""}`}</h1>
     <div className="text-sm text-gray-600">{person.gedcom_id} · {person.sex||""}</div>
+    <button onClick={researchThisPerson} disabled={creating} className="px-3 py-1 bg-emerald-600 text-white rounded text-sm disabled:opacity-50">{creating?"Creating…":"Research this person"}</button>
     <div className="grid grid-cols-2 gap-4">
       <div className="border rounded p-3"><div className="text-xs text-gray-500">Birth</div><div>{person.birth_date_original||"—"} {person.birth_place?`· ${person.birth_place}`:""}</div></div>
       <div className="border rounded p-3"><div className="text-xs text-gray-500">Death</div><div>{person.death_date_original||"—"} {person.death_place?`· ${person.death_place}`:""}</div></div>

@@ -19,12 +19,13 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/branches": { "get": { "summary": "List branches" } },
             "/api/v1/trees/{tree_id}/source-coverage": { "get": { "summary": "Source coverage" } },
             "/api/v1/trees/{tree_id}/analysis-runs": { "get": { "summary": "List analysis runs" } },
-            "/api/v1/trees/{tree_id}/research-tasks": { "get": { "summary": "List research tasks", "parameters": [{"name":"status"},{"name":"person_id"},{"name":"opportunity_id"}] }, "post": { "summary": "Create research task" } },
+            "/api/v1/trees/{tree_id}/research-tasks": { "get": { "summary": "List research tasks", "parameters": [{"name":"status"},{"name":"person_id"},{"name":"opportunity_id"},{"name":"has_outcome"}] }, "post": { "summary": "Create research task" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}": { "get": { "summary": "Get research task (outcome embedded)" }, "patch": { "summary": "Update research task" }, "delete": { "summary": "Delete research task" } },
             "/api/v1/trees/{tree_id}/research-opportunities/{opportunity_id}/tasks": { "post": { "summary": "Create task from opportunity" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/outcome": { "post": { "summary": "Create research outcome for task" } },
             "/api/v1/trees/{tree_id}/research-outcomes": { "get": { "summary": "List research outcomes", "parameters": [{"name":"type"},{"name":"task_id"},{"name":"person_id"}] } },
             "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
+            "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes counts)" } },
         }
     }))
 }

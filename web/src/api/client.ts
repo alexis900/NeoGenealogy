@@ -75,15 +75,16 @@ export const api = {
   getCoverage: (treeId:number)=> req<import("./types").SourceCoverage>(`/api/v1/trees/${treeId}/source-coverage`),
   getRuns: (treeId:number)=> req<{items: import("./types").AnalysisRun[]}>(`/api/v1/trees/${treeId}/analysis-runs`),
   // Research Tasks
-  getTasks: (treeId:number, params?:{status?:string;person_id?:number;opportunity_id?:number;limit?:number;offset?:number})=>{
+  getTasks: (treeId:number, params?:{status?:string;person_id?:number;opportunity_id?:number;has_outcome?:boolean;limit?:number;offset?:number})=>{
     const q=new URLSearchParams();
     if(params?.status) q.set("status",params.status);
     if(params?.person_id) q.set("person_id",String(params.person_id));
     if(params?.opportunity_id) q.set("opportunity_id",String(params.opportunity_id));
+    if(params?.has_outcome!==undefined) q.set("has_outcome",String(params.has_outcome));
     if(params?.limit!==undefined) q.set("limit",String(params.limit));
     if(params?.offset!==undefined) q.set("offset",String(params.offset));
     const s=q.toString()?`?${q}`:"";
-    return req<import("./types").Paginated<import("./types").ResearchTask>>(`/api/v1/trees/${treeId}/research-tasks${s}`);
+    return req<import("./types").Paginated<import("./types").ResearchTask & {has_outcome?:boolean; opportunity?:{id:number;score?:number;priority?:string;why?:string}}>>(`/api/v1/trees/${treeId}/research-tasks${s}`);
   },
   getTask: (treeId:number, taskId:number)=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}`),
   createTask: (treeId:number, body:{title:string;description?:string;person_id?:number;opportunity_id?:number})=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks`,{method:"POST", body:JSON.stringify(body)}),
@@ -105,4 +106,5 @@ export const api = {
   createOutcome: (treeId:number, taskId:number, body:{type:string;summary:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/outcome`,{method:"POST", body:JSON.stringify(body)}),
   updateOutcome: (treeId:number, outcomeId:number, body:{type?:string;summary?:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteOutcome: (treeId:number, outcomeId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"DELETE"}),
+  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}}>(`/api/v1/trees/${treeId}/research/summary`),
 };

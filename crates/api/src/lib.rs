@@ -89,6 +89,10 @@ pub fn create_router(state: AppState) -> Router {
                 .patch(handlers::research_outcomes::update_outcome)
                 .delete(handlers::research_outcomes::delete_outcome),
         )
+        .route(
+            "/trees/:tree_id/research/summary",
+            get(handlers::research_summary::get_research_summary),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 
