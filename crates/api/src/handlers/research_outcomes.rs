@@ -112,6 +112,7 @@ async fn to_json_with_evidence(
             "sources_count": a.sources_count,
             "cited_count": a.cited_count,
             "uncited_count": a.uncited_count,
+            "cited_supporting_count": a.cited_supporting_count,
             "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
         })
     }).unwrap_or(serde_json::json!(null));
@@ -324,6 +325,7 @@ pub async fn list_outcomes(
                     "sources_count": a.sources_count,
                     "cited_count": a.cited_count,
                     "uncited_count": a.uncited_count,
+                    "cited_supporting_count": a.cited_supporting_count,
                     "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
                 })
             }).unwrap_or(serde_json::json!(null));
@@ -431,6 +433,7 @@ pub async fn list_outcomes(
                 "sources_count": a.sources_count,
                 "cited_count": a.cited_count,
                 "uncited_count": a.uncited_count,
+                "cited_supporting_count": a.cited_supporting_count,
                 "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
             })
         }).unwrap_or(serde_json::json!({
@@ -442,6 +445,7 @@ pub async fn list_outcomes(
             "sources_count": 0,
             "cited_count": 0,
             "uncited_count": 0,
+            "cited_supporting_count": 0,
             "reasons": []
         }));
         let gaps_json = gaps_map.get(&row.id).map(|v| {

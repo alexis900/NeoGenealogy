@@ -174,4 +174,6 @@ export const api = {
   getOutcomeEvidence: (treeId:number, outcomeId:number)=> req<{items: import("./types").EvidenceWithRelationship[]}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence`),
   attachEvidence: (treeId:number, outcomeId:number, evidenceId:number, body:{relationship:string})=> req<{outcome_id:number;evidence_id:number;relationship:string}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"POST", body:JSON.stringify(body)}),
   detachEvidence: (treeId:number, outcomeId:number, evidenceId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"DELETE"}),
+  // Case Summary
+  getCaseSummary: (treeId:number, taskId:number)=> req<import("./types").ResearchCaseSummary>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/case-summary`),
 };

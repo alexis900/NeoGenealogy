@@ -237,6 +237,20 @@ GET  /api/v1/trees/1/research/summary → {followup_actions:{open,completed,skip
 
 Ver `docs/RESEARCH_FOLLOWUP_ACTIONS.md` para `Gap → Follow-up → Action` y `Action completed ≠ Gap resolved`.
 
+## Research Case Summary — Fase 4.5
+
+```
+GET /api/v1/trees/:tree_id/research-tasks/:task_id/case-summary → 200 {task, person, opportunity, outcome, evidence_assessment, evidence_gaps, research_followups, followup_actions, timeline, closure_warnings}
+```
+
+- `task {id,title,description,status,resolution,created_at,started_at,completed_at,updated_at}` siempre presente; `person/opportunity/outcome/evidence_assessment` `null` si no existe; arrays nunca `null`.
+- `timeline [{event_type,timestamp,label}]` derivado (`TASK_CREATED`, `TASK_STARTED`, `OUTCOME_CREATED`, `OUTCOME_UPDATED`, `FOLLOWUP_ACTION_CREATED`, `FOLLOWUP_ACTION_COMPLETED`, `TASK_COMPLETED`), orden `timestamp ASC`.
+- `closure_warnings [{code,severity,title,description}]` códigos `RESOLVED_WITHOUT_OUTCOME(WARNING)`, `CONFIRMED_WITHOUT_SUPPORT(CRITICAL)`, `RESOLVED_WITH_EVIDENCE_GAPS(INFO)`, `REJECTED_WITH_CONFIRMED_OUTCOME(WARNING)`, `INCONCLUSIVE_WITH_CONFIRMED_OUTCOME(WARNING)` — puros, no bloquean.
+- 404 solo `TASK_NOT_FOUND` (tree isolation); funciona para task sin outcome/evidence/gaps.
+- Sin N+1, sin nuevo `CaseStatus`; `Task.status` sigue fuente de verdad.
+
+Ver `docs/RESEARCH_CASE_SUMMARY.md`.
+
 ## Errores
 
 ```json

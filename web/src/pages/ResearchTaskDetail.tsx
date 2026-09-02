@@ -40,6 +40,9 @@ export default function ResearchTaskDetail(){
   const [showAddEvidence,setShowAddEvidence]=useState(false);
   const [evSourceId,setEvSourceId]=useState(""); const [evCitationId,setEvCitationId]=useState(""); const [evStatement,setEvStatement]=useState(""); const [evNotes,setEvNotes]=useState(""); const [evRelationship,setEvRelationship]=useState("SUPPORTS");
   const [evSaving,setEvSaving]=useState(false);
+  const [caseSummary,setCaseSummary]=useState<any>(null);
+  const [caseSummaryLoading,setCaseSummaryLoading]=useState(true);
+  const [caseSummaryError,setCaseSummaryError]=useState<string|null>(null);
 
   const load=async()=>{
     setLoading(true); setErr(null);
@@ -70,6 +73,12 @@ export default function ResearchTaskDetail(){
         const srcs=await api.getSources(tid,{limit:100});
         setSources(srcs.items);
       }catch{}
+      // Load case summary (derived view, never blocks main task)
+      try{
+        setCaseSummaryLoading(true); setCaseSummaryError(null);
+        const cs = await (api as any).getCaseSummary ? await (api as any).getCaseSummary(tid,id) : null;
+        if(cs) setCaseSummary(cs);
+      }catch(e:any){ setCaseSummaryError(e.message); setCaseSummary(null); } finally{ setCaseSummaryLoading(false); }
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load()},[tid,id]);
@@ -86,6 +95,7 @@ export default function ResearchTaskDetail(){
       const updated=await api.updateTask(tid,id,{title:editTitle, description:editDesc, status:editStatus, resolution:editResolution||undefined});
       setTask(updated);
       setEditStatus(updated.status); setEditResolution(updated.resolution||"");
+      try{ const cs=await (api as any).getCaseSummary?.(tid,id); if(cs) setCaseSummary(cs); }catch{}
     }catch(e:any){setErr(e.message)} finally{setSaving(false)}
   };
   const quickStatus=async(status:string)=>{
@@ -93,6 +103,7 @@ export default function ResearchTaskDetail(){
     try{
       const updated=await api.updateTask(tid,id,{status});
       setTask(updated); setEditStatus(updated.status);
+      try{ const cs=await (api as any).getCaseSummary?.(tid,id); if(cs) setCaseSummary(cs); }catch{}
     }catch(e:any){setErr(e.message)} finally{setSaving(false)}
   };
   const remove=async()=>{
@@ -444,6 +455,69 @@ export default function ResearchTaskDetail(){
         <div>Completed: {task.completed_at? new Date(task.completed_at).toLocaleString():"—"}</div>
       </div>
     </div>
+    {/* Research Case Summary */}
+    <div className="border rounded p-4 bg-white space-y-3">
+      <h3 className="font-semibold">Research Case Summary</h3>
+      {caseSummaryLoading ? <div className="text-sm text-gray-600">Loading case summary…</div> :
+       caseSummaryError ? <div className="text-sm text-red-700"><span>{caseSummaryError}</span> <button onClick={async()=>{setCaseSummaryError(null); setCaseSummaryLoading(true); try{const cs=await (api as any).getCaseSummary(tid,id); setCaseSummary(cs);}catch(e:any){setCaseSummaryError(e.message)} finally{setCaseSummaryLoading(false)}} } className="ml-2 px-2 py-1 border rounded text-xs bg-white">Retry</button></div> :
+       !caseSummary ? <div className="text-sm text-gray-500">No case summary available.</div> :
+       <div className="space-y-3">
+         <div className="grid grid-cols-2 gap-2 text-sm">
+           <div><span className="font-semibold">Status</span><div>{caseSummary.task?.status}</div></div>
+           <div><span className="font-semibold">Resolution</span><div>{caseSummary.task?.resolution || "—"}</div></div>
+           <div><span className="font-semibold">Outcome</span><div>{caseSummary.outcome ? formatOutcomeType(caseSummary.outcome.type) : "—"}</div></div>
+           <div><span className="font-semibold">Evidence</span><div>{caseSummary.evidence_assessment ? caseSummary.evidence_assessment.evidence_total : 0}</div></div>
+           <div><span className="font-semibold">Assessment</span><div>{caseSummary.evidence_assessment ? `${formatAssessmentStatus(caseSummary.evidence_assessment.status)} · ${caseSummary.evidence_assessment.score}` : "—"}</div></div>
+           <div><span className="font-semibold">Evidence gaps</span><div>{caseSummary.evidence_gaps?.length ?? 0}</div></div>
+           <div><span className="font-semibold">Follow-ups</span><div>{caseSummary.research_followups?.length ?? 0}</div></div>
+           <div><span className="font-semibold">Follow-up actions</span><div>{caseSummary.followup_actions ? `${caseSummary.followup_actions.filter((a:any)=>a.status==="COMPLETED").length} completed / ${caseSummary.followup_actions.length} total` : "0"}</div></div>
+         </div>
+         {/* Warnings */}
+         {caseSummary.closure_warnings && caseSummary.closure_warnings.length>0 && (
+           <div className="space-y-2">
+             <div className="text-sm font-semibold">Closure Warnings</div>
+             {caseSummary.closure_warnings.map((w:any)=>(
+               <div key={w.code} className={`rounded px-3 py-2 text-sm ${w.severity==="CRITICAL"?"bg-red-50 border border-red-200 text-red-800": w.severity==="WARNING"?"bg-amber-50 border border-amber-200 text-amber-800":"bg-blue-50 border border-blue-200 text-blue-800"}`}>
+                 <div className="font-semibold">{w.severity==="CRITICAL"?"Critical":w.severity==="WARNING"?"Warning":"Info"}: {w.title}</div>
+                 <div className="text-xs mt-0.5">{w.description}</div>
+                 <div className="text-xs mt-1 opacity-70">Code: {w.code}</div>
+               </div>
+             ))}
+           </div>
+         )}
+         {/* Timeline */}
+         {caseSummary.timeline && caseSummary.timeline.length>0 && (
+           <div className="border rounded p-3 bg-gray-50">
+             <div className="text-sm font-semibold mb-2">Timeline</div>
+             <div className="space-y-1">
+               {caseSummary.timeline.map((ev:any,idx:number)=>(
+                 <div key={idx} className="text-xs flex gap-2">
+                   <span className="font-mono text-gray-600">{new Date(ev.timestamp).toLocaleString()}</span>
+                   <span className="font-semibold">{ev.event_type}</span>
+                   <span>{ev.label}</span>
+                 </div>
+               ))}
+             </div>
+           </div>
+         )}
+         {/* Case Closure when terminal */}
+         {(["RESOLVED","REJECTED","INCONCLUSIVE"].includes(caseSummary.task?.status)) && (
+           <div className="border rounded p-3 bg-gray-50 space-y-2">
+             <div className="text-sm font-semibold">Case Closure</div>
+             <div className="text-xs space-y-1">
+               <div>Status: {caseSummary.task?.status}</div>
+               <div>Resolution: {caseSummary.task?.resolution || "—"}</div>
+               <div>Completed at: {caseSummary.task?.completed_at ? new Date(caseSummary.task.completed_at).toLocaleString() : "—"}</div>
+               <div>Outcome: {caseSummary.outcome ? `${formatOutcomeType(caseSummary.outcome.type)} — ${caseSummary.outcome.summary}` : "—"}</div>
+               <div>Assessment: {caseSummary.evidence_assessment ? `${formatAssessmentStatus(caseSummary.evidence_assessment.status)} · ${caseSummary.evidence_assessment.score}` : "—"}</div>
+               <div>Warnings: {caseSummary.closure_warnings?.length ? caseSummary.closure_warnings.map((w:any)=>w.code).join(", ") : "none"}</div>
+             </div>
+           </div>
+         )}
+       </div>
+      }
+    </div>
+
     {opp && <div className="border rounded p-4 bg-gray-50">
       <div className="text-xs font-semibold text-gray-500">Original Opportunity — What the system found</div>
       <h3 className="font-semibold mb-2 mt-1">Original Research Opportunity</h3>

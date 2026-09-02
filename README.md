@@ -1,6 +1,6 @@
-# NeoGenealogy v0.4.4 — Research Follow-up Actions
+# NeoGenealogy v0.4.5 — Research Case Summary
 
-Herramienta local de análisis genealógico. Release v0.4.4 añade Research Follow-up Actions (`Outcome → Evidence → Assessment → Gaps → Follow-ups → Actions`). Fase 4.3 cerraba Follow-ups.
+Herramienta local de análisis genealógico. Release v0.4.5 añade Research Case Summary (vista derivada `Task → Outcome → Evidence → Assessment → Gaps → Follow-ups → Actions → Case Summary + Warnings + Timeline`). Cierre del bloque 4.x.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
@@ -11,6 +11,7 @@ HOW WELL IT IS SUPPORTED     → Evidence Assessment (score/status/reasons)
 WHAT IS MISSING              → Evidence Gaps (CRITICAL/WARNING/INFO)
 WHAT TO DO NEXT (GENERIC)    → Research Follow-ups (HIGH/MEDIUM/LOW)
 WHAT WAS DONE                → Follow-up Actions (OPEN/COMPLETED/SKIPPED)
+HOW IT ENDED                 → Research Case Summary (timeline + closure warnings)
 ```
 
 ```
@@ -52,12 +53,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005)
-- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, OpenAPI)
+- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Case Summary` (derivado, case_summary.rs)
+- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Case Summary, OpenAPI)
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
-- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome + Follow-ups/Actions integration)
+- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome + Follow-ups/Actions + Case Summary integration)
 
-Véase `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+Véase `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -72,8 +73,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence), `/trees/:treeId/research/history` (filtros assessment/gap), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
-Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED]` — ver `docs/RESEARCH_FOLLOWUP_ACTIONS.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence + **Case Summary** con Warnings/Timeline/Closure), `/trees/:treeId/research/history` (filtros assessment/gap + View Case Summary), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED] → Case Summary` — ver `docs/RESEARCH_CASE_SUMMARY.md`.
 
 ## API REST
 

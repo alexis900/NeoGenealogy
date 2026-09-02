@@ -1,4 +1,5 @@
 pub mod branches;
+pub mod case_summary;
 pub mod citations;
 pub mod coverage;
 pub mod evidence;

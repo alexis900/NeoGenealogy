@@ -2165,4 +2165,141 @@ impl Storage {
         }
         Ok(map)
     }
+
+    pub async fn get_research_case_summary(
+        &self,
+        tree_id: i64,
+        task_id: i64,
+    ) -> Result<crate::case_summary::ResearchCaseSummary, StorageError> {
+        // Fetch task with tree isolation
+        let task = self
+            .get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        if task.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} not in tree {tree_id}"
+            )));
+        }
+
+        // Person (batch single query)
+        let person = if let Some(pid) = task.person_id {
+            let p =
+                sqlx::query_as::<_, PersonRow>("SELECT * FROM persons WHERE id=?1 AND tree_id=?2")
+                    .bind(pid)
+                    .bind(tree_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
+            p.map(|row| crate::case_summary::CaseSummaryPerson {
+                person_id: row.id,
+                person_name: row.display_name.clone().unwrap_or_else(|| {
+                    let gn = row.given_name.clone().unwrap_or_default();
+                    let sn = row.surname.clone().unwrap_or_default();
+                    let combined = format!("{} {}", gn, sn).trim().to_string();
+                    if combined.is_empty() {
+                        row.gedcom_id.clone()
+                    } else {
+                        combined
+                    }
+                }),
+            })
+        } else {
+            None
+        };
+
+        // Opportunity (single query)
+        let opportunity = if let Some(oid) = task.opportunity_id {
+            let opp = sqlx::query_as::<_, ResearchOpportunityRow>(
+                "SELECT * FROM research_opportunities WHERE id=?1 AND tree_id=?2",
+            )
+            .bind(oid)
+            .bind(tree_id)
+            .fetch_optional(&self.pool)
+            .await?;
+            opp.map(|o| crate::case_summary::CaseSummaryOpportunity {
+                opportunity_id: o.id,
+                score: o.score,
+                priority: o.priority.clone(),
+                researchability: o.researchability.clone(),
+                confidence: o.confidence,
+                title: o
+                    .why
+                    .clone()
+                    .or_else(|| o.what.clone())
+                    .or(Some(format!("Opportunity {}", o.id))),
+            })
+        } else {
+            None
+        };
+
+        // Outcome (single query)
+        let outcome_row = self.get_research_outcome_by_task(task_id).await?;
+        let outcome_dto = outcome_row
+            .as_ref()
+            .map(|o| crate::case_summary::CaseSummaryOutcome {
+                outcome_id: o.id,
+                r#type: o.r#type.clone(),
+                summary: o.summary.clone(),
+                details: o.details.clone(),
+                created_at: o.created_at.clone(),
+                updated_at: o.updated_at.clone(),
+            });
+
+        // Evidence assessment / gaps / followups (reuse existing pure functions, single stats query if outcome exists)
+        let (assessment, gaps, followups) = if let Some(ref o) = outcome_row {
+            let stats = self.get_outcome_evidence_stats(o.id).await?;
+            let ass = crate::assessment::calculate_evidence_assessment(&stats);
+            let g = crate::assessment::calculate_evidence_gaps(&o.r#type, &stats);
+            let fu = crate::assessment::calculate_research_followups(&o.r#type, &stats, &g);
+            (Some(ass), g, fu)
+        } else {
+            (None, Vec::new(), Vec::new())
+        };
+
+        // Follow-up actions (single query, no N+1)
+        let followup_actions = sqlx::query_as::<_, ResearchFollowupActionRow>(
+            "SELECT * FROM research_followup_actions WHERE task_id=?1 AND tree_id=?2 ORDER BY updated_at DESC",
+        )
+        .bind(task_id)
+        .bind(tree_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        // Timeline (derived, no extra table)
+        let timeline =
+            crate::case_summary::build_timeline(&task, outcome_row.as_ref(), &followup_actions);
+
+        // Closure warnings (pure)
+        let warnings = crate::case_summary::calculate_closure_warnings(
+            &task.status,
+            outcome_row.as_ref().map(|o| o.r#type.as_str()),
+            assessment.as_ref().map(|a| a.status.as_str()),
+            &gaps,
+        );
+
+        let task_dto = crate::case_summary::CaseSummaryTask {
+            id: task.id,
+            title: task.title.clone(),
+            description: task.description.clone(),
+            status: task.status.clone(),
+            resolution: task.resolution.clone(),
+            created_at: task.created_at.clone(),
+            started_at: task.started_at.clone(),
+            completed_at: task.completed_at.clone(),
+            updated_at: task.updated_at.clone(),
+        };
+
+        Ok(crate::case_summary::ResearchCaseSummary {
+            task: task_dto,
+            person,
+            opportunity,
+            outcome: outcome_dto,
+            evidence_assessment: assessment,
+            evidence_gaps: gaps,
+            research_followups: followups,
+            followup_actions,
+            timeline,
+            closure_warnings: warnings,
+        })
+    }
 }

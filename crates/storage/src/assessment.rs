@@ -28,6 +28,7 @@ pub struct EvidenceAssessment {
     pub sources_count: i64,
     pub cited_count: i64,
     pub uncited_count: i64,
+    pub cited_supporting_count: i64,
     pub reasons: Vec<AssessmentReason>,
 }
 
@@ -159,6 +160,7 @@ pub fn calculate_evidence_assessment(stats: &EvidenceStats) -> EvidenceAssessmen
         sources_count: stats.sources_count,
         cited_count: stats.cited_count,
         uncited_count: stats.uncited_count,
+        cited_supporting_count: stats.cited_supporting_count,
         reasons,
     }
 }

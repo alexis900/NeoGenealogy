@@ -1,4 +1,5 @@
 pub mod assessment;
+pub mod case_summary;
 pub mod db;
 pub mod error;
 pub mod import;

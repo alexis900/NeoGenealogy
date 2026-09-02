@@ -126,7 +126,8 @@ create_research_citation, get_research_citation, list_research_citations, update
    create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
     attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
     get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments, get_outcome_gaps, get_outcomes_gaps, get_outcome_followups, get_outcomes_followups (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment` / `calculate_evidence_gaps` / `calculate_research_followups`),
-    create_followup_action, get_followup_action, list_followup_actions, list_task_followup_actions, list_outcome_followup_actions, get_outcomes_followup_actions_counts, update_followup_action, delete_followup_action, count_followup_actions_by_status,
+     create_followup_action, get_followup_action, list_followup_actions, list_task_followup_actions, list_outcome_followup_actions, get_outcomes_followup_actions_counts, update_followup_action, delete_followup_action, count_followup_actions_by_status,
+    get_research_case_summary(tree_id, task_id) → ResearchCaseSummary {task, person, opportunity, outcome, evidence_assessment, evidence_gaps, research_followups, followup_actions, timeline, closure_warnings} (vista derivada, sin persistencia, batch sin N+1, isolation por tree_id),
     research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info} + research_followups {high,medium,low} + followup_actions {open,completed,skipped})
 ```
 

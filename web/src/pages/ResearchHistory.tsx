@@ -91,8 +91,8 @@ export default function ResearchHistory(){
           // alternative: count warnings
           const warningCount = gaps.filter((g:any)=>g.severity==="WARNING").length;
           const gapDisplay = gaps.length>0 ? (warningCount>0 && gaps.length===1 ? `Gaps: 1 warning` : gapLabel) : "";
-          return <Link key={o.id} to={`/trees/${id}/research/tasks/${o.task_id}`} className="block border rounded p-3 hover:bg-gray-50">
-          <div className="grid md:grid-cols-12 gap-1 text-sm">
+          return <div key={o.id} className="block border rounded p-3 hover:bg-gray-50">
+          <Link to={`/trees/${id}/research/tasks/${o.task_id}`} className="grid md:grid-cols-12 gap-1 text-sm">
             <span className="col-span-2 text-xs text-gray-600">{new Date(o.created_at).toLocaleDateString()}</span>
             <span className="col-span-1"><span className="px-2 py-1 bg-emerald-100 rounded text-xs font-semibold">{formatOutcomeType(o.type)}</span></span>
             <span className="col-span-3 font-medium">{o.summary}</span>
@@ -104,10 +104,11 @@ export default function ResearchHistory(){
               {followups.length>0 && <span className="ml-2 text-xs">Follow-ups: {followups.length}</span>}
               {faCount>0 && <span className="ml-2 text-xs">Follow-up actions: {faCount}</span>}
             </span>
-          </div>
+          </Link>
           {o.details && <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{o.details}</div>}
           {gaps.length>0 && <div className="text-xs text-gray-500 mt-1">Gaps: {gaps.map((g:any)=>g.code).join(", ")}</div>}
-        </Link>
+          <Link to={`/trees/${id}/research/tasks/${o.task_id}`} className="text-xs text-blue-600 underline mt-1 inline-block">View Case Summary</Link>
+        </div>
         })}
         <Pagination limit={limit} offset={offset} total={total} onChange={load} />
       </div>

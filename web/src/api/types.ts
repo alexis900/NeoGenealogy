@@ -139,4 +139,22 @@ export interface EvidenceWithRelationship {
   created_at:string; updated_at:string;
 }
 
+export type ClosureWarningCode = "RESOLVED_WITHOUT_OUTCOME" | "CONFIRMED_WITHOUT_SUPPORT" | "RESOLVED_WITH_EVIDENCE_GAPS" | "REJECTED_WITH_CONFIRMED_OUTCOME" | "INCONCLUSIVE_WITH_CONFIRMED_OUTCOME";
+export type ClosureWarningSeverity = "INFO" | "WARNING" | "CRITICAL";
+export interface ResearchCaseClosureWarning { code:ClosureWarningCode; severity:ClosureWarningSeverity; title:string; description:string; }
+export type TimelineEventType = "TASK_CREATED" | "TASK_STARTED" | "OUTCOME_CREATED" | "OUTCOME_UPDATED" | "FOLLOWUP_ACTION_CREATED" | "FOLLOWUP_ACTION_COMPLETED" | "TASK_COMPLETED";
+export interface ResearchCaseTimelineEvent { event_type:TimelineEventType; timestamp:string; label:string; }
+export interface ResearchCaseSummary {
+  task: { id:number; title:string; description?:string|null; status:TaskStatus; resolution?:string|null; created_at:string; started_at?:string|null; completed_at?:string|null; updated_at:string; tree_id?:number; };
+  person: { person_id:number; person_name:string } | null;
+  opportunity: { opportunity_id:number; score?:number|null; priority?:string|null; researchability?:string|null; confidence?:number|null; title?:string|null } | null;
+  outcome: { outcome_id:number; type:OutcomeType; summary:string; details?:string|null; created_at:string; updated_at:string } | null;
+  evidence_assessment: EvidenceAssessment | null;
+  evidence_gaps: EvidenceGap[];
+  research_followups: ResearchFollowUp[];
+  followup_actions: ResearchFollowupAction[];
+  timeline: ResearchCaseTimelineEvent[];
+  closure_warnings: ResearchCaseClosureWarning[];
+}
+
 export interface ApiErrorBody { error:{code:string; message:string} }

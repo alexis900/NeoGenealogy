@@ -38,6 +38,7 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-followup-actions": { "get": { "summary": "List followup actions", "parameters": [{"name":"task_id"},{"name":"outcome_id"},{"name":"status"},{"name":"followup_code"}] } },
             "/api/v1/trees/{tree_id}/research-followup-actions/{action_id}": { "get": { "summary": "Get followup action" }, "patch": { "summary": "Update followup action" }, "delete": { "summary": "Delete followup action" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/followup-actions": { "get": { "summary": "List followup actions for task" } },
+            "/api/v1/trees/{tree_id}/research-tasks/{task_id}/case-summary": { "get": { "summary": "Get research case summary", "description": "Derived view: task + person + opportunity + outcome + evidence_assessment + evidence_gaps + research_followups + followup_actions + timeline + closure_warnings. 404 only if TASK_NOT_FOUND. No persistent CaseStatus." } },
         },
         "components": {
             "schemas": {
@@ -130,7 +131,41 @@ pub async fn get_openapi() -> Json<Value> {
                         "completed_at": { "type": "string", "nullable": true }
                     }
                 },
-                "ResearchFollowupActionStatus": { "type": "string", "enum": ["OPEN","COMPLETED","SKIPPED"] }
+                "ResearchFollowupActionStatus": { "type": "string", "enum": ["OPEN","COMPLETED","SKIPPED"] },
+                "ResearchCaseTimelineEvent": {
+                    "type": "object",
+                    "properties": {
+                        "event_type": { "type": "string", "enum": ["TASK_CREATED","TASK_STARTED","OUTCOME_CREATED","OUTCOME_UPDATED","FOLLOWUP_ACTION_CREATED","FOLLOWUP_ACTION_COMPLETED","TASK_COMPLETED"] },
+                        "timestamp": { "type": "string", "format": "date-time" },
+                        "label": { "type": "string" }
+                    }
+                },
+                "ResearchCaseClosureWarning": {
+                    "type": "object",
+                    "properties": {
+                        "code": { "type": "string", "enum": ["RESOLVED_WITHOUT_OUTCOME","CONFIRMED_WITHOUT_SUPPORT","RESOLVED_WITH_EVIDENCE_GAPS","REJECTED_WITH_CONFIRMED_OUTCOME","INCONCLUSIVE_WITH_CONFIRMED_OUTCOME"] },
+                        "severity": { "type": "string", "enum": ["INFO","WARNING","CRITICAL"] },
+                        "title": { "type": "string" },
+                        "description": { "type": "string" }
+                    }
+                },
+                "ClosureWarningCode": { "type": "string", "enum": ["RESOLVED_WITHOUT_OUTCOME","CONFIRMED_WITHOUT_SUPPORT","RESOLVED_WITH_EVIDENCE_GAPS","REJECTED_WITH_CONFIRMED_OUTCOME","INCONCLUSIVE_WITH_CONFIRMED_OUTCOME"] },
+                "ClosureWarningSeverity": { "type": "string", "enum": ["INFO","WARNING","CRITICAL"] },
+                "ResearchCaseSummary": {
+                    "type": "object",
+                    "properties": {
+                        "task": { "type": "object", "description": "Task fields: id,title,description,status,resolution,created_at,started_at,completed_at,updated_at" },
+                        "person": { "type": "object", "nullable": true, "properties": { "person_id": { "type": "integer" }, "person_name": { "type": "string" } } },
+                        "opportunity": { "type": "object", "nullable": true, "properties": { "opportunity_id": { "type": "integer" }, "score": { "type": "integer", "nullable": true }, "priority": { "type": "string", "nullable": true }, "researchability": { "type": "string", "nullable": true }, "confidence": { "type": "number", "nullable": true }, "title": { "type": "string", "nullable": true } } },
+                        "outcome": { "type": "object", "nullable": true, "properties": { "outcome_id": { "type": "integer" }, "type": { "type": "string" }, "summary": { "type": "string" }, "details": { "type": "string", "nullable": true }, "created_at": { "type": "string" }, "updated_at": { "type": "string" } } },
+                        "evidence_assessment": { "$ref": "#/components/schemas/EvidenceAssessment", "nullable": true },
+                        "evidence_gaps": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceGap" } },
+                        "research_followups": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowUp" } },
+                        "followup_actions": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchFollowupAction" } },
+                        "timeline": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchCaseTimelineEvent" } },
+                        "closure_warnings": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchCaseClosureWarning" } }
+                    }
+                }
             }
         }
     }))

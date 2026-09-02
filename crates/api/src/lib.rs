@@ -150,6 +150,10 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research-tasks/:task_id/followup-actions",
             get(handlers::followup_actions::list_task_actions),
         )
+        .route(
+            "/trees/:tree_id/research-tasks/:task_id/case-summary",
+            get(handlers::case_summary::get_case_summary),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 
