@@ -93,6 +93,44 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research/summary",
             get(handlers::research_summary::get_research_summary),
         )
+        .route(
+            "/trees/:tree_id/sources",
+            get(handlers::sources::list_sources).post(handlers::sources::create_source),
+        )
+        .route(
+            "/trees/:tree_id/sources/:source_id",
+            get(handlers::sources::get_source)
+                .patch(handlers::sources::update_source)
+                .delete(handlers::sources::delete_source),
+        )
+        .route(
+            "/trees/:tree_id/sources/:source_id/citations",
+            get(handlers::citations::list_citations).post(handlers::citations::create_citation),
+        )
+        .route(
+            "/trees/:tree_id/citations/:citation_id",
+            get(handlers::citations::get_citation)
+                .patch(handlers::citations::update_citation)
+                .delete(handlers::citations::delete_citation),
+        )
+        .route(
+            "/trees/:tree_id/evidence",
+            get(handlers::evidence::list_evidence).post(handlers::evidence::create_evidence),
+        )
+        .route(
+            "/trees/:tree_id/evidence/:evidence_id",
+            get(handlers::evidence::get_evidence)
+                .patch(handlers::evidence::update_evidence)
+                .delete(handlers::evidence::delete_evidence),
+        )
+        .route(
+            "/trees/:tree_id/research-outcomes/:outcome_id/evidence",
+            get(handlers::evidence::list_outcome_evidence),
+        )
+        .route(
+            "/trees/:tree_id/research-outcomes/:outcome_id/evidence/:evidence_id",
+            post(handlers::evidence::attach_evidence).delete(handlers::evidence::detach_evidence),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 

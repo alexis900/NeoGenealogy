@@ -48,13 +48,18 @@ Tablas principales (con `tree_id` como límite de aislamiento):
 - `source_coverages(id, tree_id, analysis_run_id, birth, marriage, death, other_events, overall)`
 - `research_tasks(id, tree_id, opportunity_id FK SET NULL, person_id FK SET NULL, title, description, status CHECK, created_at, updated_at, started_at, completed_at, resolution, UNIQUE(active opportunity))`
 - `research_outcomes(id, tree_id FK CASCADE, task_id UNIQUE FK CASCADE, type CHECK(CONFIRMED…), summary, details, created_at, updated_at)` — ver `docs/RESEARCH_OUTCOMES.md`
+- `research_sources(id, tree_id FK CASCADE, title, author, publication, date, type CHECK(BOOK…OTHER), created_at, updated_at)` — ver `docs/EVIDENCE_SOURCES.md` (tabla `sources` GEDCOM permanece en `gedcom_sources`)
+- `research_citations(id, source_id FK CASCADE, locator, text, created_at, updated_at)`
+- `evidence(id, tree_id FK CASCADE, source_id FK CASCADE, citation_id FK SET NULL, statement, notes, created_at, updated_at)`
+- `outcome_evidence(outcome_id FK CASCADE, evidence_id FK CASCADE, relationship CHECK(SUPPORTS|CONTRADICTS), PK(outcome_id,evidence_id))`
 
 ### Foreign keys
 
-`ON DELETE CASCADE` para `trees → persons/families/events/sources/findings/opportunities/branch_analyses/source_coverages/research_tasks/research_outcomes` — borrar árbol borra todo.  
+`ON DELETE CASCADE` para `trees → persons/families/events/sources/findings/opportunities/branch_analyses/source_coverages/research_tasks/research_outcomes/research_sources/evidence/outcome_evidence` — borrar árbol borra todo.  
 `ON DELETE CASCADE` para `research_outcomes.task_id` y `research_outcomes.tree_id` — borrar Task borra su Outcome.  
-`ON DELETE SET NULL` para `research_tasks.opportunity_id/person_id`, `events.person_id`, `findings.person_id` etc. — permite conservar tasks aunque se borre oportunidad/persona.  
-`ON DELETE CASCADE` para `citations.source_id`, `family_members` — consistencia.
+`ON DELETE CASCADE` para `research_sources.tree_id`, `evidence.tree_id/source_id`, `research_citations.source_id`, `outcome_evidence` ambos FK.
+`ON DELETE SET NULL` para `evidence.citation_id`, `research_tasks.opportunity_id/person_id`, `events.person_id`, `findings.person_id` etc. — permite conservar tasks/evidence aunque se borre cita/oportunidad/persona.  
+`ON DELETE CASCADE` para `citations.source_id` (GEDCOM), `family_members` — consistencia.
 
 Activadas con `PRAGMA foreign_keys = ON`.
 
@@ -65,13 +70,17 @@ persons(tree_id)
 persons(tree_id, gedcom_id)
 families(tree_id, gedcom_id)
 events(tree_id) events(person_id) events(family_id)
-sources(tree_id)
+sources(tree_id) -- GEDCOM
 findings(tree_id) findings(person_id) findings(severity)
 research_opportunities(tree_id) (score) (priority)
 branch_analyses(tree_id, analysis_run_id)
 source_coverages(tree_id, analysis_run_id)
 research_tasks(tree_id) (tree_id,status) (person_id) (opportunity_id) unique_active(opportunity_id,status) WHERE status IN ('OPEN','IN_PROGRESS')
 research_outcomes(tree_id) (task_id UNIQUE) (type) (created_at)
+research_sources(tree_id) (type)
+research_citations(source_id)
+evidence(tree_id) (source_id) (citation_id)
+outcome_evidence(outcome_id) (evidence_id)
 ```
 
 ### Raw tags
@@ -109,7 +118,12 @@ get_tree, list_trees, get_person, list_persons(limit/offset), get_family, list_f
 get_findings, get_research_opportunities, get_top_research_opportunities(limit, priority>=High),
 get_branches, get_source_coverage, get_analysis_runs, count(tree_id),
 create_research_task, get_research_task, list_research_tasks, update_research_task, delete_research_task,
-create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome
+create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome,
+create_research_source, get_research_source, list_research_sources, update_research_source, delete_research_source,
+create_research_citation, get_research_citation, list_research_citations, update_research_citation, delete_research_citation,
+create_evidence, get_evidence, list_evidence, update_evidence, delete_evidence,
+attach_evidence_to_outcome, detach_evidence_from_outcome, list_outcome_evidence, list_outcome_evidence_detailed,
+research_summary (con sources/evidence counts)
 ```
 
 Paginación: `limit/offset` en listados para preparar futura API HTTP sin rediseñar acceso a datos.

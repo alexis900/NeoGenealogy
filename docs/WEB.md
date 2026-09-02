@@ -1,6 +1,6 @@
 # Web UI
 
-React + TypeScript + Vite + Tailwind, consume `GET /api/v1/*` y `POST/PATCH/DELETE` para Research Tasks y Outcomes.
+React + TypeScript + Vite + Tailwind, consume `GET /api/v1/*` y `POST/PATCH/DELETE` para Research Tasks, Outcomes, Sources/Citations/Evidence.
 
 ## Stack
 
@@ -41,8 +41,13 @@ getTrees(), getTree(id), getPersons(treeId,{limit,offset}), getPerson(treeId,per
 getFamilies, getFamily, getFindings({severity,type,person_id}), 
 getResearchOpportunities({priority,min_score,sort}), getTopResearchOpportunities,
 getBranches, getSourceCoverage, getAnalysisRuns,
-getTasks({status,person_id,opportunity_id}), getTask, createTask, createTaskFromOpportunity, updateTask, deleteTask,
-getOutcomes({type,task_id,person_id}), getOutcome, createOutcome, updateOutcome, deleteOutcome
+getTasks({status,person_id,opportunity_id,has_outcome}), getTask, createTask, createTaskFromOpportunity, updateTask, deleteTask,
+getOutcomes({type,task_id,person_id}), getOutcome, createOutcome, updateOutcome, deleteOutcome,
+getSources({type}), getSource, createSource, updateSource, deleteSource,
+getCitations, getCitation, createCitation, updateCitation, deleteCitation,
+getEvidenceList, getEvidence, createEvidence, updateEvidence, deleteEvidence,
+getOutcomeEvidence, attachEvidence, detachEvidence,
+getResearchSummary
 ```
 
 No hay `fetch()` disperso.
@@ -51,7 +56,7 @@ No hay `fetch()` disperso.
 
 `web/src/api/types.ts` refleja exactamente DTOs de `docs/API.md`:
 
-`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at}, OutcomeType, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
+`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome,has_outcome,opportunity}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at,evidence}, OutcomeType, ResearchSource, ResearchCitation, Evidence, EvidenceWithRelationship, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
 
 No recalcula score/confidence.
 
@@ -61,15 +66,21 @@ No recalcula score/confidence.
  /              → Trees (selección)
  /trees         → Trees
  /trees/:treeId → Dashboard (overview + top 5 + Research Tasks summary)
- /trees/:treeId/research → Research Queue (filtros priority/min_score/sort)
- /trees/:treeId/research/tasks → Research Tasks (filtros status, paginación)
- /trees/:treeId/research/tasks/:taskId → Research Task Detail (edición status/resolution + Outcome Record/Edit/Delete)
+ /trees/:treeId/research → Research Workspace (Overview: Opportunities/Active Tasks/Recent Outcomes + evidence/sources metrics)
+ /trees/:treeId/research/opportunities → Research Queue (filtros priority/min_score/sort)
+ /trees/:treeId/research/tasks → Research Tasks (filtros status/has_outcome/person/opportunity, paginación, has_outcome badge)
+ /trees/:treeId/research/tasks/:taskId → Research Task Detail (workflow actions + Outcome + Evidence SUPPORTS/CONTRADICTS)
+ /trees/:treeId/research/history → Research History (outcomes + evidence count)
  /trees/:treeId/research/:oppId → Opportunity Detail (ScoreBreakdown + Start Research)
+ /trees/:treeId/sources → Research Sources (lista + Create/Edit/Delete)
+ /trees/:treeId/sources/:sourceId -> SourceDetail (Citations)
+ /trees/:treeId/evidence -> Evidence (lista + Create)
+ /trees/:treeId/evidence/:evidenceId -> EvidenceDetail
  /trees/:treeId/persons → Persons list (paginado)
- /trees/:treeId/persons/:personId → Person Detail (findings + opps + tasks)
+ /trees/:treeId/persons/:personId → Person Detail (findings + opps + tasks + Research this person)
  /trees/:treeId/findings → Findings (severity/type)
  /trees/:treeId/branches → Branches (branch_score)
- /trees/:treeId/sources → SourceCoverage (barras Birth/Marriage/Death/Other/Overall)
+ /trees/:treeId/coverage -> SourceCoverage (barras Birth/Marriage/Death/Other/Overall) (alias /source-coverage)
  ```
 
 Layout `web/src/components/Layout.tsx` con sidebar. TreeId se propaga por URL, no se asume `1`.
@@ -79,11 +90,16 @@ Layout `web/src/components/Layout.tsx` con sidebar. TreeId se propaga por URL, n
 - **Dashboard**: `getTree` + `getTop(limit=5)` + `getTasks(limit=100)` → overview + Research Tasks summary (Open/In Progress/Resolved) + `Ver toda la cola →`
 - **Research Queue**: `getResearchOpportunities` con filtros `Priority, Sort(score/priority/confidence), min_score` → `ResearchOpportunityCard`; distinción `Research Queue` (automático) vs `Research Tasks` (humano).
 - **Opportunity Detail**: `ScoreBreakdown` + `Start Research` (`POST /research-opportunities/:id/tasks`) o `View Research Task` si ya existe.
-- **Research Tasks**: `getTasks` con filtros `status/person_id/opportunity_id`, paginación; `ResearchTasks.tsx` lista.
-- **ResearchTask Detail**: `getTask`/`updateTask`/`deleteTask` → edita `title/description/status/resolution`; sección `Research Outcome` → `getTask.outcome` embebido, sin outcome muestra `Record Outcome` (type/summary/details), con outcome muestra badge + summary/details + `Edit Outcome` / `Delete Outcome`; muestra `Original Research Opportunity` con `ScoreBreakdown` (persiste tras Outcome CRUD).
-- **Person Detail**: `getPerson` + `getFindings?person_id` + `getOpportunities` + `getTasks?person_id` → muestra tasks asociadas.
+- **Research Workspace**: `getResearchSummary` + `getTasks(limit 5)` + `getOutcomes(limit 5)` → 3 bloques Opportunities (high/medium/low) + Active Tasks (OPEN/IN_PROGRESS) + Recent Outcomes + métricas `Evidence/Sources`.
+- **Research Tasks**: `getTasks` con filtros `status/has_outcome/person_id/opportunity_id` combinables, orden `IN_PROGRESS>OPEN>updated_at`, cards con `has_outcome` y `opportunity{score,priority}`.
+- **ResearchTask Detail**: `getTask`/`updateTask`/`deleteTask` + workflow `Start/Mark Resolved/Rejected/Inconclusive`; sección `Research Outcome` + `Evidence` (SUPPORTS/CONTRADICTS, Add Evidence con Source/Citation select, Statement/Notes, attach/detach); muestra `Original Research Opportunity`.
+- **Research History**: `getOutcomes(limit 20)` + `getOutcomeEvidence` por item → tabla Date/Type/Summary/Task + `Evidence: N`, filtros type/person, paginación.
+- **ResearchSources**: `getSources` con type filter, create/edit/delete.
+- **SourceDetail**: `getSource` + `getCitations` con create/delete citation.
+- **Evidence**: `getEvidenceList` + create con Source/Citation.
+- **Person Detail**: `getPerson` + `getFindings?person_id` + `getOpportunities` + `getTasks?person_id` + `Research this person` (crea Task manual).
 - **Branches**: tabla cards ordenada por `branch_score`.
-- **Sources**: `Bar` con `value%` exacto de API.
+- **Coverage**: `Bar` con `value%` exacto de API.
 
 Todos los listados usan `limit/offset` (max 100) y `Pagination`.
 
@@ -102,11 +118,17 @@ Cada página: `Loading…`, `Success`, `Empty`, `Error` con `Retry`, sin stack t
 - `web/src/components/__tests__/TaskStatusBadge.test.tsx` (TaskStatus)
 - `web/src/components/__tests__/OpportunityCard.test.tsx` (card + ScoreBreakdown)
 - `web/src/components/__tests__/common.test.tsx` (Loading/Empty/Error/Pagination)
-- `web/src/pages/__tests__/ResearchTasks.test.tsx` (list, filters, empty)
-- `web/src/pages/__tests__/ResearchTaskDetail.test.tsx` (detail, update, outcome: create/edit/delete, 5 tipos, no duplicate form, Original Opportunity persiste, error/retry, 204 handling)
+- `web/src/components/__tests__/Layout.test.tsx` (Research nav)
+- `web/src/pages/__tests__/ResearchWorkspace.test.tsx` (overview, empty, error)
+- `web/src/pages/__tests__/ResearchHistory.test.tsx` (history, filters, evidence count)
+- `web/src/pages/__tests__/ResearchTasks.test.tsx` (list, filters combinados, cards, outcome badge, has_outcome)
+- `web/src/pages/__tests__/ResearchTaskDetail.test.tsx` (detail, outcome: create/edit/delete, evidence SUPPORTS/CONTRADICTS)
+- `web/src/pages/__tests__/ResearchSources.test.tsx` (list, create, empty, error)
+- `web/src/pages/__tests__/SourceDetail.test.tsx` (detail, citations)
+- `web/src/pages/__tests__/Evidence.test.tsx` (list, create)
 
 ```bash
-npm run test # vitest run → 27 tests
+npm run test # vitest run → 49 tests
 ```
 
 ## Limitaciones

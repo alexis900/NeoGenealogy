@@ -107,4 +107,45 @@ export const api = {
   updateOutcome: (treeId:number, outcomeId:number, body:{type?:string;summary?:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteOutcome: (treeId:number, outcomeId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"DELETE"}),
   getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}}>(`/api/v1/trees/${treeId}/research/summary`),
+  // Sources
+  getSources: (treeId:number, params?:{type?:string;limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.type) q.set("type",params.type);
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchSource>>(`/api/v1/trees/${treeId}/sources${s}`);
+  },
+  getSource: (treeId:number, sourceId:number)=> req<import("./types").ResearchSource>(`/api/v1/trees/${treeId}/sources/${sourceId}`),
+  createSource: (treeId:number, body:{title:string;author?:string;publication?:string;date?:string;type:string})=> req<import("./types").ResearchSource>(`/api/v1/trees/${treeId}/sources`,{method:"POST", body:JSON.stringify(body)}),
+  updateSource: (treeId:number, sourceId:number, body:{title?:string;author?:string;publication?:string;date?:string;type?:string})=> req<import("./types").ResearchSource>(`/api/v1/trees/${treeId}/sources/${sourceId}`,{method:"PATCH", body:JSON.stringify(body)}),
+  deleteSource: (treeId:number, sourceId:number)=> req<void>(`/api/v1/trees/${treeId}/sources/${sourceId}`,{method:"DELETE"}),
+  // Citations
+  getCitations: (treeId:number, sourceId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchCitation>>(`/api/v1/trees/${treeId}/sources/${sourceId}/citations${s}`);
+  },
+  getCitation: (treeId:number, citationId:number)=> req<import("./types").ResearchCitation>(`/api/v1/trees/${treeId}/citations/${citationId}`),
+  createCitation: (treeId:number, sourceId:number, body:{locator?:string;text?:string})=> req<import("./types").ResearchCitation>(`/api/v1/trees/${treeId}/sources/${sourceId}/citations`,{method:"POST", body:JSON.stringify(body)}),
+  updateCitation: (treeId:number, citationId:number, body:{locator?:string;text?:string})=> req<import("./types").ResearchCitation>(`/api/v1/trees/${treeId}/citations/${citationId}`,{method:"PATCH", body:JSON.stringify(body)}),
+  deleteCitation: (treeId:number, citationId:number)=> req<void>(`/api/v1/trees/${treeId}/citations/${citationId}`,{method:"DELETE"}),
+  // Evidence
+  getEvidenceList: (treeId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").Evidence>>(`/api/v1/trees/${treeId}/evidence${s}`);
+  },
+  getEvidence: (treeId:number, evidenceId:number)=> req<import("./types").Evidence>(`/api/v1/trees/${treeId}/evidence/${evidenceId}`),
+  createEvidence: (treeId:number, body:{source_id:number;citation_id?:number|null;statement:string;notes?:string})=> req<import("./types").Evidence>(`/api/v1/trees/${treeId}/evidence`,{method:"POST", body:JSON.stringify(body)}),
+  updateEvidence: (treeId:number, evidenceId:number, body:{statement?:string;notes?:string;citation_id?:number})=> req<import("./types").Evidence>(`/api/v1/trees/${treeId}/evidence/${evidenceId}`,{method:"PATCH", body:JSON.stringify(body)}),
+  deleteEvidence: (treeId:number, evidenceId:number)=> req<void>(`/api/v1/trees/${treeId}/evidence/${evidenceId}`,{method:"DELETE"}),
+  // Outcome Evidence
+  getOutcomeEvidence: (treeId:number, outcomeId:number)=> req<{items: import("./types").EvidenceWithRelationship[]}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence`),
+  attachEvidence: (treeId:number, outcomeId:number, evidenceId:number, body:{relationship:string})=> req<{outcome_id:number;evidence_id:number;relationship:string}>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"POST", body:JSON.stringify(body)}),
+  detachEvidence: (treeId:number, outcomeId:number, evidenceId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}/evidence/${evidenceId}`,{method:"DELETE"}),
 };

@@ -86,7 +86,7 @@ export default function ResearchWorkspace(){
         </div>}
     </div>
 
-    {/* Recent Outcomes block */}
+     {/* Recent Outcomes block */}
     <div className="border rounded p-4 bg-white">
       <div className="flex justify-between items-center mb-2">
         <h2 className="font-semibold">Recent Outcomes</h2>
@@ -105,5 +105,13 @@ export default function ResearchWorkspace(){
           </Link>)}
         </div>}
     </div>
+
+    {summary && <div className="border rounded p-4 bg-gray-50">
+      <div className="text-sm text-gray-600">Evidence recorded: <strong>{summary.evidence?.total ?? 0}</strong> · Sources: <strong>{summary.sources?.total ?? 0}</strong></div>
+      <div className="flex gap-2 mt-2">
+        <Link to={`/trees/${id}/sources`} className="text-sm text-blue-600 underline">View Sources</Link>
+        <Link to={`/trees/${id}/evidence`} className="text-sm text-blue-600 underline">View Evidence</Link>
+      </div>
+    </div>}
   </div>
 }

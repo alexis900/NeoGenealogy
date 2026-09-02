@@ -637,10 +637,24 @@ impl Storage {
                 .bind(tree_id)
                 .fetch_one(&self.pool)
                 .await?;
+        let sources_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_sources WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+        let evidence_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM evidence WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
-            "outcomes": { "total": outcomes_total }
+            "outcomes": { "total": outcomes_total },
+            "sources": { "total": sources_total },
+            "evidence": { "total": evidence_total }
         }))
     }
 
@@ -937,5 +951,512 @@ impl Storage {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    // --- Research Sources ---
+    pub async fn create_research_source(
+        &self,
+        tree_id: i64,
+        title: &str,
+        author: Option<&str>,
+        publication: Option<&str>,
+        date: Option<&str>,
+        source_type: &str,
+    ) -> Result<ResearchSourceRow, StorageError> {
+        let valid = [
+            "BOOK",
+            "REGISTER",
+            "CENSUS",
+            "CIVIL_RECORD",
+            "PARISH_RECORD",
+            "NEWSPAPER",
+            "WEBSITE",
+            "OTHER",
+        ];
+        if !valid.contains(&source_type) {
+            return Err(StorageError::Import(format!(
+                "invalid source type {source_type}"
+            )));
+        }
+        if title.trim().is_empty() {
+            return Err(StorageError::Import("title must not be empty".into()));
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_sources (tree_id, title, author, publication, date, type, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+        )
+        .bind(tree_id)
+        .bind(title)
+        .bind(author)
+        .bind(publication)
+        .bind(date)
+        .bind(source_type)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row =
+            sqlx::query_as::<_, ResearchSourceRow>("SELECT * FROM research_sources WHERE id=?1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_source(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchSourceRow>, StorageError> {
+        let row =
+            sqlx::query_as::<_, ResearchSourceRow>("SELECT * FROM research_sources WHERE id=?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_sources(
+        &self,
+        tree_id: i64,
+        source_type: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchSourceRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_sources WHERE tree_id = ?".to_string();
+        let mut count_sql = "SELECT COUNT(*) FROM research_sources WHERE tree_id = ?".to_string();
+        if source_type.is_some() {
+            sql.push_str(" AND type = ?");
+            count_sql.push_str(" AND type = ?");
+        }
+        sql.push_str(" ORDER BY updated_at DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchSourceRow>(&sql).bind(tree_id);
+        if let Some(t) = source_type {
+            cq = cq.bind(t);
+            q = q.bind(t);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn update_research_source(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        author: Option<&str>,
+        publication: Option<&str>,
+        date: Option<&str>,
+        source_type: Option<&str>,
+    ) -> Result<ResearchSourceRow, StorageError> {
+        let existing = self
+            .get_research_source(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("source {id} not found")))?;
+        let new_title = title.unwrap_or(&existing.title).to_string();
+        if new_title.trim().is_empty() {
+            return Err(StorageError::Import("title must not be empty".into()));
+        }
+        let new_type = source_type.unwrap_or(&existing.r#type).to_string();
+        let valid = [
+            "BOOK",
+            "REGISTER",
+            "CENSUS",
+            "CIVIL_RECORD",
+            "PARISH_RECORD",
+            "NEWSPAPER",
+            "WEBSITE",
+            "OTHER",
+        ];
+        if !valid.contains(&new_type.as_str()) {
+            return Err(StorageError::Import(format!(
+                "invalid source type {new_type}"
+            )));
+        }
+        let new_author = author.or(existing.author.as_deref());
+        let new_pub = publication.or(existing.publication.as_deref());
+        let new_date = date.or(existing.date.as_deref());
+        let now = crate::models::now_iso();
+        sqlx::query(
+            "UPDATE research_sources SET title=?1, author=?2, publication=?3, date=?4, type=?5, updated_at=?6 WHERE id=?7",
+        )
+        .bind(&new_title)
+        .bind(new_author)
+        .bind(new_pub)
+        .bind(new_date)
+        .bind(&new_type)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_research_source(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_research_source(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_sources WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // --- Research Citations ---
+    pub async fn create_research_citation(
+        &self,
+        source_id: i64,
+        locator: Option<&str>,
+        text: Option<&str>,
+    ) -> Result<ResearchCitationRow, StorageError> {
+        let source = self
+            .get_research_source(source_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("source {source_id} not found")))?;
+        let _ = source;
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_citations (source_id, locator, text, created_at, updated_at) VALUES (?1,?2,?3,?4,?5)",
+        )
+        .bind(source_id)
+        .bind(locator)
+        .bind(text)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row = sqlx::query_as::<_, ResearchCitationRow>(
+            "SELECT * FROM research_citations WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_citation(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchCitationRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchCitationRow>(
+            "SELECT * FROM research_citations WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_citations(
+        &self,
+        source_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchCitationRow>, i64), StorageError> {
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_citations WHERE source_id=?1")
+                .bind(source_id)
+                .fetch_one(&self.pool)
+                .await?;
+        let rows = sqlx::query_as::<_, ResearchCitationRow>(
+            "SELECT * FROM research_citations WHERE source_id=?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(source_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn update_research_citation(
+        &self,
+        id: i64,
+        locator: Option<&str>,
+        text: Option<&str>,
+    ) -> Result<ResearchCitationRow, StorageError> {
+        let existing = self
+            .get_research_citation(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("citation {id} not found")))?;
+        let new_locator = locator.or(existing.locator.as_deref());
+        let new_text = text.or(existing.text.as_deref());
+        let now = crate::models::now_iso();
+        sqlx::query("UPDATE research_citations SET locator=?1, text=?2, updated_at=?3 WHERE id=?4")
+            .bind(new_locator)
+            .bind(new_text)
+            .bind(&now)
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        let row = self.get_research_citation(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_research_citation(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_citations WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // --- Evidence ---
+    pub async fn create_evidence(
+        &self,
+        tree_id: i64,
+        source_id: i64,
+        citation_id: Option<i64>,
+        statement: &str,
+        notes: Option<&str>,
+    ) -> Result<EvidenceRow, StorageError> {
+        if statement.trim().is_empty() {
+            return Err(StorageError::Import("statement must not be empty".into()));
+        }
+        let source = self
+            .get_research_source(source_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("source {source_id} not found")))?;
+        if source.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "source {source_id} not in tree {tree_id}"
+            )));
+        }
+        if let Some(cid) = citation_id {
+            let cit = self
+                .get_research_citation(cid)
+                .await?
+                .ok_or_else(|| StorageError::NotFound(format!("citation {cid} not found")))?;
+            if cit.source_id != source_id {
+                return Err(StorageError::Import(
+                    "citation does not belong to source".into(),
+                ));
+            }
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO evidence (tree_id, source_id, citation_id, statement, notes, created_at, updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        )
+        .bind(tree_id)
+        .bind(source_id)
+        .bind(citation_id)
+        .bind(statement)
+        .bind(notes)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row = sqlx::query_as::<_, EvidenceRow>("SELECT * FROM evidence WHERE id=?1")
+            .bind(id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row)
+    }
+
+    pub async fn get_evidence(&self, id: i64) -> Result<Option<EvidenceRow>, StorageError> {
+        let row = sqlx::query_as::<_, EvidenceRow>("SELECT * FROM evidence WHERE id=?1")
+            .bind(id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row)
+    }
+
+    pub async fn list_evidence(
+        &self,
+        tree_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<EvidenceRow>, i64), StorageError> {
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM evidence WHERE tree_id=?1")
+            .bind(tree_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let rows = sqlx::query_as::<_, EvidenceRow>(
+            "SELECT * FROM evidence WHERE tree_id=?1 ORDER BY updated_at DESC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(tree_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn update_evidence(
+        &self,
+        id: i64,
+        statement: Option<&str>,
+        notes: Option<&str>,
+        citation_id: Option<Option<i64>>,
+    ) -> Result<EvidenceRow, StorageError> {
+        let existing = self
+            .get_evidence(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("evidence {id} not found")))?;
+        let new_statement = statement.unwrap_or(&existing.statement).to_string();
+        if new_statement.trim().is_empty() {
+            return Err(StorageError::Import("statement must not be empty".into()));
+        }
+        let new_notes = notes.or(existing.notes.as_deref());
+        let new_citation = match citation_id {
+            Some(inner) => inner,
+            None => existing.citation_id,
+        };
+        if let Some(cid) = new_citation {
+            let cit = self
+                .get_research_citation(cid)
+                .await?
+                .ok_or_else(|| StorageError::NotFound(format!("citation {cid} not found")))?;
+            if cit.source_id != existing.source_id {
+                return Err(StorageError::Import(
+                    "citation does not belong to source".into(),
+                ));
+            }
+        }
+        let now = crate::models::now_iso();
+        sqlx::query(
+            "UPDATE evidence SET statement=?1, notes=?2, citation_id=?3, updated_at=?4 WHERE id=?5",
+        )
+        .bind(&new_statement)
+        .bind(new_notes)
+        .bind(new_citation)
+        .bind(&now)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_evidence(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_evidence(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM evidence WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // --- OutcomeEvidence ---
+    pub async fn attach_evidence_to_outcome(
+        &self,
+        outcome_id: i64,
+        evidence_id: i64,
+        relationship: &str,
+    ) -> Result<OutcomeEvidenceRow, StorageError> {
+        let valid = ["SUPPORTS", "CONTRADICTS"];
+        if !valid.contains(&relationship) {
+            return Err(StorageError::Import(format!(
+                "invalid relationship {relationship}"
+            )));
+        }
+        let outcome = self
+            .get_research_outcome(outcome_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("outcome {outcome_id} not found")))?;
+        let evidence = self
+            .get_evidence(evidence_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("evidence {evidence_id} not found")))?;
+        if outcome.tree_id != evidence.tree_id {
+            return Err(StorageError::NotFound(format!(
+                "evidence {evidence_id} not in same tree as outcome {outcome_id}"
+            )));
+        }
+        let existing: Option<i64> = sqlx::query_scalar(
+            "SELECT outcome_id FROM outcome_evidence WHERE outcome_id=?1 AND evidence_id=?2",
+        )
+        .bind(outcome_id)
+        .bind(evidence_id)
+        .fetch_optional(&self.pool)
+        .await?
+        .flatten();
+        if existing.is_some() {
+            return Err(StorageError::Import("evidence already attached".into()));
+        }
+        sqlx::query("INSERT INTO outcome_evidence (outcome_id, evidence_id, relationship) VALUES (?1,?2,?3)")
+            .bind(outcome_id)
+            .bind(evidence_id)
+            .bind(relationship)
+            .execute(&self.pool)
+            .await?;
+        let row = sqlx::query_as::<_, OutcomeEvidenceRow>(
+            "SELECT * FROM outcome_evidence WHERE outcome_id=?1 AND evidence_id=?2",
+        )
+        .bind(outcome_id)
+        .bind(evidence_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn detach_evidence_from_outcome(
+        &self,
+        outcome_id: i64,
+        evidence_id: i64,
+    ) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM outcome_evidence WHERE outcome_id=?1 AND evidence_id=?2")
+            .bind(outcome_id)
+            .bind(evidence_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn list_outcome_evidence(
+        &self,
+        outcome_id: i64,
+    ) -> Result<Vec<OutcomeEvidenceRow>, StorageError> {
+        let rows = sqlx::query_as::<_, OutcomeEvidenceRow>(
+            "SELECT * FROM outcome_evidence WHERE outcome_id=?1",
+        )
+        .bind(outcome_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn list_outcome_evidence_detailed(
+        &self,
+        outcome_id: i64,
+    ) -> Result<Vec<serde_json::Value>, StorageError> {
+        let links = self.list_outcome_evidence(outcome_id).await?;
+        if links.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut result = Vec::new();
+        for link in links {
+            let evidence = self.get_evidence(link.evidence_id).await?.unwrap();
+            let source = self.get_research_source(evidence.source_id).await?.unwrap();
+            let citation = if let Some(cid) = evidence.citation_id {
+                self.get_research_citation(cid).await?
+            } else {
+                None
+            };
+            result.push(serde_json::json!({
+                "id": evidence.id,
+                "relationship": link.relationship,
+                "statement": evidence.statement,
+                "notes": evidence.notes,
+                "source": {
+                    "id": source.id,
+                    "title": source.title,
+                    "type": source.r#type,
+                    "author": source.author,
+                    "publication": source.publication,
+                    "date": source.date
+                },
+                "citation": citation.map(|c| serde_json::json!({
+                    "id": c.id,
+                    "locator": c.locator,
+                    "text": c.text
+                })),
+                "created_at": evidence.created_at,
+                "updated_at": evidence.updated_at
+            }));
+        }
+        Ok(result)
     }
 }

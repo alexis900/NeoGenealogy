@@ -5,13 +5,20 @@ import { vi } from "vitest";
 import ResearchTaskDetail from "../ResearchTaskDetail";
 
 const mockApi = vi.hoisted(() => ({
-  getTask: vi.fn(),
-  getOpportunities: vi.fn(() => Promise.resolve({ items: [] })),
-  updateTask: vi.fn(),
-  deleteTask: vi.fn(() => Promise.resolve()),
-  createOutcome: vi.fn(),
-  updateOutcome: vi.fn(),
-  deleteOutcome: vi.fn(() => Promise.resolve()),
+  getTask: vi.fn() as any,
+  getOpportunities: vi.fn(() => Promise.resolve({ items: [] } as any)) as any,
+  updateTask: vi.fn() as any,
+  deleteTask: vi.fn(() => Promise.resolve() as any) as any,
+  createOutcome: vi.fn() as any,
+  updateOutcome: vi.fn() as any,
+  deleteOutcome: vi.fn(() => Promise.resolve() as any) as any,
+  getOutcome: vi.fn(() => Promise.resolve({ id:1, type:"CONFIRMED", summary:"s", evidence:[] } as any)) as any,
+  getOutcomeEvidence: vi.fn(() => Promise.resolve({ items: [] } as any)) as any,
+  getSources: vi.fn(() => Promise.resolve({ items: [] } as any)) as any,
+  getCitations: vi.fn(() => Promise.resolve({ items: [] } as any)) as any,
+  createEvidence: vi.fn(() => Promise.resolve({ id:10, statement:"stmt"} as any)) as any,
+  attachEvidence: vi.fn(() => Promise.resolve({} as any)) as any,
+  detachEvidence: vi.fn(() => Promise.resolve() as any) as any,
 }));
 
 vi.mock("../../api/client", () => ({
@@ -294,4 +301,33 @@ test("Record Outcome enabled when summary filled", async () => {
   await user.type(input, "non-empty");
   const btn = screen.getByText("Record Outcome") as HTMLButtonElement;
   expect(btn.disabled).toBe(false);
+});
+
+test("outcome shows evidence and can add", async () => {
+  const user = userEvent.setup();
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence: [{ id:10, relationship:"SUPPORTS", statement:"stmt", source:{id:1, title:"Src"}, citation:{id:2, locator:"folio"} }] } as any);
+  (mockApi.getSources as any).mockResolvedValue({ items: [{id:1, title:"Src", type:"BOOK"}], pagination:{limit:100, offset:0, total:1}} as any);
+  (mockApi.getCitations as any).mockResolvedValue({ items: [{id:2, locator:"folio"}]} as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText("Evidence")).toBeInTheDocument();
+  expect(await screen.findByText("✓ SUPPORTS")).toBeInTheDocument();
+  expect(screen.getByText("Src")).toBeInTheDocument();
+  await user.click(screen.getByText("+ Add Evidence"));
+  // select source
+  const sourceSelect = screen.getByDisplayValue("Select Source");
+  await user.selectOptions(sourceSelect, "1");
+  await user.type(screen.getByPlaceholderText("Statement (required)"), "New statement");
+  await user.click(screen.getByText("Save Evidence"));
+  expect(mockApi.createEvidence).toHaveBeenCalled();
+  expect(mockApi.attachEvidence).toHaveBeenCalledWith(1,1,10, expect.objectContaining({relationship:"SUPPORTS"}));
+});
+
+test("evidence contradict label", async () => {
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence: [{ id:11, relationship:"CONTRADICTS", statement:"contra", source:{id:1, title:"Src"} }] } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText("⚠ CONTRADICTS")).toBeInTheDocument();
 });

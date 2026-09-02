@@ -16,6 +16,7 @@ export default function ResearchHistory(){
   const [total,setTotal]=useState(0);
   const [offset,setOffset]=useState(0); const limit=20;
   const [err,setErr]=useState<string|null>(null); const [loading,setLoading]=useState(true);
+  const [evidenceCounts,setEvidenceCounts]=useState<Record<number,number>>({});
 
   const load=async(o:number)=>{
     setLoading(true); setErr(null);
@@ -26,6 +27,15 @@ export default function ResearchHistory(){
         limit, offset:o
       });
       setItems(r.items); setTotal(r.pagination.total); setOffset(o);
+      // fetch evidence counts for each outcome without N+1 blocking? Parallel but limited
+      const counts: Record<number,number> = {};
+      await Promise.all(r.items.map(async (o:any)=>{
+        try{
+          const ev=await api.getOutcomeEvidence(id, o.id);
+          counts[o.id]=ev.items.length;
+        }catch{ counts[o.id]=0; }
+      }));
+      setEvidenceCounts(counts);
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load(0)},[id, type, personId]);
@@ -62,7 +72,7 @@ export default function ResearchHistory(){
             <span className="col-span-2"><span className="px-2 py-1 bg-emerald-100 rounded text-xs font-semibold">{formatOutcomeType(o.type)}</span></span>
             <span className="col-span-4 font-medium">{o.summary}</span>
             <span className="col-span-2 text-blue-600 underline">Task {o.task_id}</span>
-            <span className="col-span-2 text-gray-600">—</span>
+            <span className="col-span-2 text-gray-600">Evidence: {evidenceCounts[o.id] ?? "—"}</span>
           </div>
           {o.details && <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{o.details}</div>}
         </Link>)}

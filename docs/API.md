@@ -129,6 +129,42 @@ DELETE /api/v1/trees/1/research-outcomes/10 → 204
 
 Ver `docs/RESEARCH_OUTCOMES.md` para modelo completo, tipos con ejemplos y workflow `Opportunity → Task → Outcome`.
 
+## Evidence & Sources — Fase 4.0
+
+```
+GET    /api/v1/trees/1/sources?type=PARISH_RECORD&limit=20 -> {items, pagination}
+GET    /api/v1/trees/1/sources/4 -> {id,tree_id,title,author,publication,date,type}
+POST   /api/v1/trees/1/sources {title,author,publication,date,type} -> 201
+PATCH  /api/v1/trees/1/sources/4 {title,type} -> 200
+DELETE /api/v1/trees/1/sources/4 -> 204 (CASCADE citations/evidence)
+
+GET    /api/v1/trees/1/sources/4/citations -> {items}
+GET    /api/v1/trees/1/citations/12 -> {id,source_id,locator,text}
+POST   /api/v1/trees/1/sources/4/citations {locator,text} -> 201
+PATCH  /api/v1/trees/1/citations/12 {locator,text} -> 200
+DELETE /api/v1/trees/1/citations/12 -> 204 (SET NULL en evidence)
+
+GET    /api/v1/trees/1/evidence?limit=20 -> {items, pagination} (con source/citation embebidos)
+GET    /api/v1/trees/1/evidence/10 -> {id,tree_id,source_id,citation_id,statement,notes,source{title,type},citation{locator}}
+POST   /api/v1/trees/1/evidence {source_id,citation_id,statement,notes} -> 201
+PATCH  /api/v1/trees/1/evidence/10 {statement,notes,citation_id} -> 200
+DELETE /api/v1/trees/1/evidence/10 -> 204 (CASCADE outcome_evidence)
+
+GET    /api/v1/trees/1/research-outcomes/5/evidence -> {items: [{id,relationship,statement,source{...},citation{...}}]}
+POST   /api/v1/trees/1/research-outcomes/5/evidence/10 {relationship: SUPPORTS|CONTRADICTS} -> 201
+DELETE /api/v1/trees/1/research-outcomes/5/evidence/10 -> 204
+
+GET    /api/v1/trees/1/research-outcomes/5 -> 200 {id,type,summary,details,evidence: [{id,relationship,statement,source{citation}}], ...}
+```
+
+- `Source.type` ∈ BOOK,REGISTER,CENSUS,CIVIL_RECORD,PARISH_RECORD,NEWSPAPER,WEBSITE,OTHER (400 `INVALID_SOURCE_TYPE`)
+- `Evidence.statement` obligatorio (400 `INVALID_STATEMENT`), `citation` debe pertenecer al `source`
+- `relationship` ∈ SUPPORTS,CONTRADICTS (400 `INVALID_EVIDENCE_RELATIONSHIP`, duplicado 409 `EVIDENCE_ALREADY_ATTACHED`)
+- Tree isolation en todos los niveles; cross-tree → 404
+- `GET outcome` incluye `evidence:[]` sin N+1 (batch), `DELETE outcome` mantiene `Evidence` reutilizable
+
+Ver `docs/EVIDENCE_SOURCES.md` para modelo `Source → Citation → Evidence → Outcome`.
+
 ## Errores
 
 ```json

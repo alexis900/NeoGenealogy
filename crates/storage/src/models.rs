@@ -199,6 +199,48 @@ pub struct ResearchOutcomeRow {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchSourceRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub title: String,
+    pub author: Option<String>,
+    pub publication: Option<String>,
+    pub date: Option<String>,
+    pub r#type: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchCitationRow {
+    pub id: i64,
+    pub source_id: i64,
+    pub locator: Option<String>,
+    pub text: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EvidenceRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub source_id: i64,
+    pub citation_id: Option<i64>,
+    pub statement: String,
+    pub notes: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct OutcomeEvidenceRow {
+    pub outcome_id: i64,
+    pub evidence_id: i64,
+    pub relationship: String,
+}
+
 // Helper for counts
 #[derive(Debug, sqlx::FromRow)]
 pub struct CountRow {

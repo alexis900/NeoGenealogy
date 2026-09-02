@@ -1,11 +1,12 @@
-# NeoGenealogy v0.3.0 — Research Outcomes
+# NeoGenealogy v0.4.0 — Evidence & Sources
 
-Herramienta local de análisis genealógico. Release v0.3.0 cierra Research Outcomes (`Opportunity → Task → Outcome`).
+Herramienta local de análisis genealógico. Release v0.4.0 añade Evidence & Sources (`Source → Citation → Evidence → Outcome`).
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
 WHAT THE USER DECIDED TO INVESTIGATE → Research Task (OPEN → RESOLVED/…)
 WHAT THE USER DISCOVERED     → Research Outcome (CONFIRMED/…)
+WHAT SUPPORTS THAT CONCLUSION → Evidence (SUPPORTS/CONTRADICTS) → Source + Citation
 ```
 
 ```
@@ -47,12 +48,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003, UNIQUE task, CASCADE)
-- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks, Research Outcomes, OpenAPI)
+- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004)
+- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, OpenAPI)
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
-- `web/` — React 19 + Vite + Tailwind + React Router (Research Queue + Research Tasks + Outcomes)
+- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome integration)
 
-Véase `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`, `docs/RESEARCH_ENGINE.md`, `docs/SCORING.md`, `docs/SOURCE_COVERAGE.md`, `docs/ANALYSIS_RULES.md`.
+Véase `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -67,8 +68,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Queue), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome: Record/Edit/Delete) , `/trees/:treeId/persons/:personId`, `/trees/:treeId/findings`, `/trees/:treeId/branches`, `/trees/:treeId/sources`.
-Workflow: `Opportunity → Start Research → Task OPEN → IN_PROGRESS → RESOLVED/REJECTED/INCONCLUSIVE → Outcome (CONFIRMED/FALSE_LEAD/INCONCLUSIVE/NEW_LEAD/NO_EVIDENCE)` — ver `docs/RESEARCH_OUTCOMES.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Evidence), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence), `/trees/:treeId/persons/:personId`, `/trees/:treeId/findings`, `/trees/:treeId/branches`, `/trees/:treeId/coverage`.
+Workflow: `Opportunity → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Source/Citation` — ver `docs/EVIDENCE_SOURCES.md`.
 
 ## API REST
 

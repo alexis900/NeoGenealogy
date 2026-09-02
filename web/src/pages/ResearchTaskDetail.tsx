@@ -20,6 +20,12 @@ export default function ResearchTaskDetail(){
   const [outcomeType,setOutcomeType]=useState("CONFIRMED");
   const [outcomeSummary,setOutcomeSummary]=useState(""); const [outcomeDetails,setOutcomeDetails]=useState("");
   const [outcomeSaving,setOutcomeSaving]=useState(false);
+  const [evidence,setEvidence]=useState<any[]>([]);
+  const [sources,setSources]=useState<any[]>([]);
+  const [citations,setCitations]=useState<any[]>([]);
+  const [showAddEvidence,setShowAddEvidence]=useState(false);
+  const [evSourceId,setEvSourceId]=useState(""); const [evCitationId,setEvCitationId]=useState(""); const [evStatement,setEvStatement]=useState(""); const [evNotes,setEvNotes]=useState(""); const [evRelationship,setEvRelationship]=useState("SUPPORTS");
+  const [evSaving,setEvSaving]=useState(false);
 
   const load=async()=>{
     setLoading(true); setErr(null);
@@ -28,8 +34,12 @@ export default function ResearchTaskDetail(){
       setTask(t); setEditTitle(t.title); setEditDesc(t.description||""); setEditStatus(t.status); setEditResolution(t.resolution||"");
       if(t.outcome){
         setOutcomeType(t.outcome.type); setOutcomeSummary(t.outcome.summary); setOutcomeDetails(t.outcome.details||"");
+        try{
+          const detailed=await api.getOutcome(tid,t.outcome.id);
+          setEvidence(detailed.evidence||[]);
+        }catch{ setEvidence([]); }
       } else {
-        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails("");
+        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]);
       }
       if(t.opportunity_id){
         try{
@@ -38,9 +48,19 @@ export default function ResearchTaskDetail(){
           if(found) setOpp(found);
         }catch{}
       }
+      try{
+        const srcs=await api.getSources(tid,{limit:100});
+        setSources(srcs.items);
+      }catch{}
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load()},[tid,id]);
+
+  useEffect(()=>{
+    if(evSourceId){
+      api.getCitations(tid, Number(evSourceId)).then(r=>setCitations(r.items)).catch(()=>setCitations([]));
+    } else { setCitations([]); setEvCitationId(""); }
+  },[evSourceId]);
 
   const save=async()=>{
     setSaving(true);
@@ -65,7 +85,7 @@ export default function ResearchTaskDetail(){
     setOutcomeSaving(true);
     try{
       const o=await api.createOutcome(tid,id,{type:outcomeType, summary:outcomeSummary, details:outcomeDetails||undefined});
-      setTask({...task, outcome:o});
+      setTask({...task, outcome:o}); setEvidence([]);
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
   const updateOutcome=async()=>{
@@ -81,7 +101,28 @@ export default function ResearchTaskDetail(){
     if(!confirm("Delete outcome?")) return;
     try{
       await api.deleteOutcome(tid,task.outcome.id);
-      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails("");
+      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]);
+    }catch(e:any){setErr(e.message)}
+  };
+  const addEvidence=async()=>{
+    if(!task.outcome) return;
+    if(!evSourceId || !evStatement.trim()) return;
+    setEvSaving(true);
+    try{
+      const ev=await api.createEvidence(tid,{source_id: Number(evSourceId), citation_id: evCitationId?Number(evCitationId):undefined, statement: evStatement, notes: evNotes||undefined});
+      await api.attachEvidence(tid, task.outcome.id, ev.id, {relationship: evRelationship});
+      const detailed=await api.getOutcome(tid, task.outcome.id);
+      setEvidence(detailed.evidence||[]);
+      setEvStatement(""); setEvNotes(""); setEvCitationId(""); setEvSourceId(""); setShowAddEvidence(false);
+    }catch(e:any){setErr(e.message)} finally{setEvSaving(false)}
+  };
+  const removeEvidence=async(evidenceId:number)=>{
+    if(!task.outcome) return;
+    if(!confirm("Remove evidence from outcome?")) return;
+    try{
+      await api.detachEvidence(tid, task.outcome.id, evidenceId);
+      const detailed=await api.getOutcome(tid, task.outcome.id);
+      setEvidence(detailed.evidence||[]);
     }catch(e:any){setErr(e.message)}
   };
 
@@ -130,6 +171,42 @@ export default function ResearchTaskDetail(){
           <div className="flex gap-2 items-center"><span className="px-2 py-1 bg-emerald-100 rounded text-sm font-semibold">{formatOutcomeType(task.outcome.type)}</span><span className="text-xs text-gray-600">{new Date(task.outcome.created_at).toLocaleString()}</span></div>
           <div><div className="text-sm font-semibold">Summary</div><div className="text-sm">{task.outcome.summary}</div></div>
           {task.outcome.details && <div><div className="text-sm font-semibold">Details</div><div className="text-sm whitespace-pre-wrap">{task.outcome.details}</div></div>}
+          <div className="border rounded p-3 bg-gray-50">
+            <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Evidence</h4><span className="text-xs text-gray-600">{evidence.length} attached</span></div>
+            {evidence.length===0 ? <div className="text-sm text-gray-500">No evidence attached yet.</div> :
+              <div className="space-y-2">{evidence.map((ev:any)=><div key={ev.id} className="border rounded p-3 bg-white">
+                <div className="flex justify-between items-start">
+                  <span className={`px-2 py-1 rounded text-xs font-semibold ${ev.relationship==="SUPPORTS"?"bg-emerald-100 text-emerald-800":"bg-orange-100 text-orange-800"}`}>{ev.relationship==="SUPPORTS"?"✓ SUPPORTS":"⚠ CONTRADICTS"}</span>
+                  <button onClick={()=>removeEvidence(ev.id)} className="text-xs text-red-600 underline">Remove</button>
+                </div>
+                <div className="text-sm font-medium mt-1">{ev.source?.title||`Source ${ev.source?.id}`}</div>
+                {ev.citation && <div className="text-xs text-gray-600">{ev.citation.locator || "Citation"}</div>}
+                <div className="text-sm mt-1 italic">"{ev.statement}"</div>
+                {ev.notes && <div className="text-xs text-gray-600">Notes: {ev.notes}</div>}
+              </div>)}</div>}
+            {!showAddEvidence ? <button onClick={()=>setShowAddEvidence(true)} className="mt-3 px-3 py-1 bg-emerald-600 text-white rounded text-sm">+ Add Evidence</button> :
+              <div className="mt-3 space-y-2 border-t pt-3">
+                <div className="text-sm font-semibold">Add Evidence</div>
+                <select value={evSourceId} onChange={e=>setEvSourceId(e.target.value)} className="w-full border rounded px-2 py-1">
+                  <option value="">Select Source</option>
+                  {sources.map((s:any)=><option key={s.id} value={s.id}>{s.title} ({s.type})</option>)}
+                </select>
+                <Link to={`/trees/${tid}/sources`} className="text-xs text-blue-600 underline">Create Source</Link>
+                <select value={evCitationId} onChange={e=>setEvCitationId(e.target.value)} className="w-full border rounded px-2 py-1">
+                  <option value="">No citation (optional)</option>
+                  {citations.map((c:any)=><option key={c.id} value={c.id}>{c.locator || `Citation ${c.id}`}</option>)}
+                </select>
+                <select value={evRelationship} onChange={e=>setEvRelationship(e.target.value)} className="border rounded px-2 py-1">
+                  <option value="SUPPORTS">SUPPORTS</option><option value="CONTRADICTS">CONTRADICTS</option>
+                </select>
+                <textarea value={evStatement} onChange={e=>setEvStatement(e.target.value)} placeholder="Statement (required)" className="w-full border rounded px-2 py-1" rows={2} />
+                <textarea value={evNotes} onChange={e=>setEvNotes(e.target.value)} placeholder="Notes (optional)" className="w-full border rounded px-2 py-1" rows={2} />
+                <div className="flex gap-2">
+                  <button onClick={addEvidence} disabled={evSaving || !evSourceId || !evStatement.trim()} className="px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-50">{evSaving?"Saving…":"Save Evidence"}</button>
+                  <button onClick={()=>setShowAddEvidence(false)} className="px-3 py-1 border rounded">Cancel</button>
+                </div>
+              </div>}
+          </div>
           <div className="border-t pt-3 space-y-2">
             <div className="text-sm font-semibold">Edit Outcome</div>
             <select value={outcomeType} onChange={e=>setOutcomeType(e.target.value)} className="border rounded px-2 py-1">

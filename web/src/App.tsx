@@ -13,6 +13,10 @@ import PersonDetail from "./pages/PersonDetail";
 import Findings from "./pages/Findings";
 import Branches from "./pages/Branches";
 import Sources from "./pages/Sources";
+import ResearchSources from "./pages/ResearchSources";
+import SourceDetail from "./pages/SourceDetail";
+import Evidence from "./pages/Evidence";
+import EvidenceDetail from "./pages/EvidenceDetail";
 
 export default function App(){
   return <BrowserRouter>
@@ -32,7 +36,12 @@ export default function App(){
         <Route path="/trees/:treeId/persons/:personId" element={<PersonDetail/>} />
         <Route path="/trees/:treeId/findings" element={<Findings/>} />
         <Route path="/trees/:treeId/branches" element={<Branches/>} />
-        <Route path="/trees/:treeId/sources" element={<Sources/>} />
+        <Route path="/trees/:treeId/sources" element={<ResearchSources/>} />
+        <Route path="/trees/:treeId/sources/:sourceId" element={<SourceDetail/>} />
+        <Route path="/trees/:treeId/evidence" element={<Evidence/>} />
+        <Route path="/trees/:treeId/evidence/:evidenceId" element={<EvidenceDetail/>} />
+        <Route path="/trees/:treeId/coverage" element={<Sources/>} />
+        <Route path="/trees/:treeId/source-coverage" element={<Sources/>} />
       </Route>
     </Routes>
   </BrowserRouter>

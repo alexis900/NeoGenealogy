@@ -72,6 +72,30 @@ export type OutcomeType = "CONFIRMED" | "FALSE_LEAD" | "INCONCLUSIVE" | "NEW_LEA
 export interface ResearchOutcome {
   id:number; tree_id:number; task_id:number; type:OutcomeType; summary:string; details?:string|null;
   created_at:string; updated_at:string;
+  evidence?: EvidenceWithRelationship[];
+}
+
+export type SourceType = "BOOK"|"REGISTER"|"CENSUS"|"CIVIL_RECORD"|"PARISH_RECORD"|"NEWSPAPER"|"WEBSITE"|"OTHER";
+export interface ResearchSource {
+  id:number; tree_id:number; title:string; author?:string|null; publication?:string|null; date?:string|null; type:SourceType;
+  created_at:string; updated_at:string;
+}
+export interface ResearchCitation {
+  id:number; source_id:number; locator?:string|null; text?:string|null;
+  created_at:string; updated_at:string;
+}
+export type EvidenceRelationship = "SUPPORTS"|"CONTRADICTS";
+export interface Evidence {
+  id:number; tree_id:number; source_id:number; citation_id?:number|null; statement:string; notes?:string|null;
+  created_at:string; updated_at:string;
+  source?: {id:number; title:string; type:SourceType};
+  citation?: {id:number; locator?:string|null; text?:string|null} | null;
+}
+export interface EvidenceWithRelationship {
+  id:number; relationship:EvidenceRelationship; statement:string; notes?:string|null;
+  source:{id:number; title:string; type:SourceType; author?:string|null; publication?:string|null; date?:string|null};
+  citation?:{id:number; locator?:string|null; text?:string|null} | null;
+  created_at:string; updated_at:string;
 }
 
 export interface ApiErrorBody { error:{code:string; message:string} }

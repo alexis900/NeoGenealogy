@@ -1,5 +1,7 @@
 pub mod branches;
+pub mod citations;
 pub mod coverage;
+pub mod evidence;
 pub mod families;
 pub mod findings;
 pub mod health;
@@ -10,4 +12,5 @@ pub mod research_outcomes;
 pub mod research_summary;
 pub mod research_tasks;
 pub mod runs;
+pub mod sources;
 pub mod trees;

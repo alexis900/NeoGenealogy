@@ -16,10 +16,12 @@ export default function Layout(){
             {link(`${base}/research/tasks`, "Tasks")}
             {link(`${base}/research/history`, "History")}
           </div>
+          {link(`${base}/sources`, "Sources")}
+          {link(`${base}/evidence`, "Evidence")}
           {link(`${base}/persons`, "Persons")}
           {link(`${base}/findings`, "Findings")}
           {link(`${base}/branches`, "Branches")}
-          {link(`${base}/sources`, "Sources")}
+          {link(`${base}/coverage`, "Coverage")}
         </> : <>
           {link("/", "Home")}
           {link("/trees", "Trees")}
