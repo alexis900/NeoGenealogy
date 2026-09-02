@@ -165,6 +165,22 @@ GET    /api/v1/trees/1/research-outcomes/5 -> 200 {id,type,summary,details,evide
 
 Ver `docs/EVIDENCE_SOURCES.md` para modelo `Source → Citation → Evidence → Outcome`.
 
+## Evidence Assessment — Fase 4.1
+
+```
+GET /api/v1/trees/1/research-outcomes/5 → {evidence:[], evidence_assessment:{score,status,evidence_total,supporting_count,contradicting_count,sources_count,cited_count,uncited_count,reasons:[{code,points,message}]}}
+GET /api/v1/trees/1/research-outcomes?assessment_status=NO_EVIDENCE&limit=20 → {items:[{evidence,evidence_assessment}], pagination}
+GET /api/v1/trees/1/research/summary → {opportunities,tasks,outcomes,sources,evidence,assessment:{no_evidence,weak,mixed,supported,strongly_supported}}
+```
+
+- `EvidenceAssessment.status` ∈ NO_EVIDENCE,WEAK,MIXED,SUPPORTED,STRONGLY_SUPPORTED — ver `docs/EVIDENCE_ASSESSMENT.md` para fórmula y reglas.
+- `score` 0..100 con `reasons` explicables (bonuses +30/+20/+15/+10/+10/+5, penalties -30/-15/-10, clamp 0..100).
+- `assessment_status` filtra server-side sin N+1 (batch `GROUP BY`, 400 `INVALID_ASSESSMENT_STATUS` si inválido).
+- `GET /research-outcomes` y `GET /research-outcomes/:id` coinciden con JSON real (`evidence_assessment` incluido).
+- OpenAPI documenta `EvidenceAssessment`, `EvidenceAssessmentReason`, `EvidenceStats`, `assessment_status`.
+
+Ver `docs/EVIDENCE_ASSESSMENT.md` para propósito ("¿Qué tan respaldada está esta conclusión?" vs "¿Es verdadera?") y diferencia Research Score vs Evidence Score.
+
 ## Errores
 
 ```json

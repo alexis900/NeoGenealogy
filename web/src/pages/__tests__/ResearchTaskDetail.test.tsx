@@ -331,3 +331,114 @@ test("evidence contradict label", async () => {
   await screen.findByText(/Find parents/);
   expect(await screen.findByText("⚠ CONTRADICTS")).toBeInTheDocument();
 });
+
+function makeAssessment(status:string, score:number, overrides:any={}){
+  return {
+    status,
+    score,
+    evidence_total: overrides.evidence_total ?? 2,
+    supporting_count: overrides.supporting_count ?? 2,
+    contradicting_count: overrides.contradicting_count ?? 0,
+    sources_count: overrides.sources_count ?? 2,
+    cited_count: overrides.cited_count ?? 1,
+    uncited_count: overrides.uncited_count ?? 1,
+    reasons: overrides.reasons ?? [
+      { code:"SUPPORTING_EVIDENCE", points:30, message:"Supporting evidence exists"},
+      { code:"MULTIPLE_SUPPORTING_EVIDENCE", points:20, message:"Multiple supporting evidence"},
+    ]
+  };
+}
+
+test("assessment NO_EVIDENCE shows score 0 and counts", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("NO_EVIDENCE",0,{evidence_total:0,supporting_count:0,contradicting_count:0,sources_count:0,cited_count:0,uncited_count:0,reasons:[]});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/NO.?EVIDENCE/)).toBeInTheDocument();
+  expect(screen.getByText("0 / 100")).toBeInTheDocument();
+  expect(screen.getByText("0 supporting")).toBeInTheDocument();
+  expect(screen.getByText("0 contradicting")).toBeInTheDocument();
+  expect(screen.getByText("0 sources")).toBeInTheDocument();
+  expect(screen.getByText("0 citations")).toBeInTheDocument();
+});
+
+test("assessment WEAK shows reasons", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"FALSE_LEAD", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("WEAK",25,{supporting_count:1, contradicting_count:0, sources_count:1, cited_count:0, uncited_count:1, evidence_total:1,
+    reasons:[{code:"SUPPORTING_EVIDENCE",points:30,message:"Supporting evidence exists"},{code:"NO_CITATION",points:-10,message:"No evidence has citation"}]});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[{id:10,relationship:"SUPPORTS",statement:"stmt",source:{id:1,title:"Src"}}], evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/WEAK/)).toBeInTheDocument();
+  expect(screen.getByText("25 / 100")).toBeInTheDocument();
+  expect(screen.getByText("1 supporting")).toBeInTheDocument();
+  expect(screen.getByText("Why this assessment?")).toBeInTheDocument();
+  expect(screen.getByText("+30 Supporting evidence exists")).toBeInTheDocument();
+  expect(screen.getByText("-10 No evidence has citation")).toBeInTheDocument();
+});
+
+test("assessment SUPPORTED shows correct counts", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"INCONCLUSIVE", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("SUPPORTED",75,{supporting_count:2, contradicting_count:0, sources_count:1, cited_count:1, evidence_total:2});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/SUPPORTED/)).toBeInTheDocument();
+  expect(screen.getByText("75 / 100")).toBeInTheDocument();
+  expect(screen.getByText("2 supporting")).toBeInTheDocument();
+  expect(screen.getByText("0 contradicting")).toBeInTheDocument();
+});
+
+test("assessment STRONGLY_SUPPORTED", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"NEW_LEAD", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("STRONGLY_SUPPORTED",90,{supporting_count:3, contradicting_count:0, sources_count:2, cited_count:2, evidence_total:3,
+    reasons:[{code:"SUPPORTING_EVIDENCE",points:30,message:"Supporting evidence exists"},{code:"SUPPORTING_EVIDENCE_HAS_CITATION",points:15,message:"Supporting evidence has citation"}]});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/STRONGLY/)).toBeInTheDocument();
+  expect(screen.getByText("90 / 100")).toBeInTheDocument();
+  expect(screen.getByText("3 supporting")).toBeInTheDocument();
+  expect(screen.getByText("+15 Supporting evidence has citation")).toBeInTheDocument();
+});
+
+test("assessment MIXED shows contradicting", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("MIXED",40,{supporting_count:2, contradicting_count:1, sources_count:2, cited_count:2, evidence_total:3,
+    reasons:[{code:"CONTRADICTING_EVIDENCE",points:-30,message:"Contradicting evidence exists"}]});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/MIXED/)).toBeInTheDocument();
+  expect(screen.getByText("1 contradicting")).toBeInTheDocument();
+  expect(screen.getByText("-30 Contradicting evidence exists")).toBeInTheDocument();
+});
+
+test("CONFIRMED + NO_EVIDENCE shows warning", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("NO_EVIDENCE",0,{evidence_total:0,supporting_count:0,contradicting_count:0,sources_count:0,cited_count:0,reasons:[]});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[], evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/This outcome is marked as CONFIRMED but has no recorded supporting evidence/)).toBeInTheDocument();
+});
+
+test("CONFIRMED + MIXED shows warning", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("MIXED",30,{supporting_count:1,contradicting_count:1});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(await screen.findByText(/This outcome has contradictory evidence/)).toBeInTheDocument();
+});
+
+test("CONFIRMED + SUPPORTED does not show warnings", async ()=>{
+  const outcome = { id:1, tree_id:1, task_id:1, type:"CONFIRMED", summary:"s", details:null, created_at:new Date().toISOString(), updated_at:new Date().toISOString()};
+  const assessment = makeAssessment("SUPPORTED",75,{supporting_count:2,contradicting_count:0});
+  (mockApi.getOutcome as any).mockResolvedValue({ ...outcome, evidence:[] , evidence_assessment: assessment } as any);
+  renderDetail({ outcome });
+  await screen.findByText(/Find parents/);
+  expect(screen.queryByText(/This outcome is marked as CONFIRMED but has no recorded supporting evidence/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/This outcome has contradictory evidence/)).not.toBeInTheDocument();
+});

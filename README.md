@@ -1,6 +1,6 @@
-# NeoGenealogy v0.4.0 — Evidence & Sources
+# NeoGenealogy v0.4.1 — Evidence Assessment
 
-Herramienta local de análisis genealógico. Release v0.4.0 añade Evidence & Sources (`Source → Citation → Evidence → Outcome`).
+Herramienta local de análisis genealógico. Release v0.4.1 cierra Research Evidence Assessment (`Outcome → Evidence → Assessment` explicable). Fase 4.0 añadía Evidence & Sources (`Source → Citation → Evidence → Outcome`).
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
@@ -53,7 +53,7 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
 - `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Sources/Evidence + Outcome integration)
 
-Véase `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+Véase `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 

@@ -1,0 +1,10 @@
+FROM rust:1.78-bookworm
+RUN apt-get update && apt-get install -y nodejs npm pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+COPY web ./web
+COPY test-data ./test-data
+RUN cargo fetch
+RUN npm --prefix web ci
+CMD ["sh", "-c", "cargo test --workspace -- --nocapture && npm --prefix web run test && echo \"--- ALL TESTS OK ---\""]

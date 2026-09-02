@@ -92,11 +92,12 @@ export const api = {
   updateTask: (treeId:number, taskId:number, body:{title?:string;description?:string;status?:string;resolution?:string})=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteTask: (treeId:number, taskId:number)=> req<void>(`/api/v1/trees/${treeId}/research-tasks/${taskId}`,{method:"DELETE"}),
   // Research Outcomes
-  getOutcomes: (treeId:number, params?:{type?:string;task_id?:number;person_id?:number;limit?:number;offset?:number})=>{
+  getOutcomes: (treeId:number, params?:{type?:string;task_id?:number;person_id?:number;assessment_status?:string;limit?:number;offset?:number})=>{
     const q=new URLSearchParams();
     if(params?.type) q.set("type",params.type);
     if(params?.task_id) q.set("task_id",String(params.task_id));
     if(params?.person_id) q.set("person_id",String(params.person_id));
+    if(params?.assessment_status) q.set("assessment_status",params.assessment_status);
     if(params?.limit!==undefined) q.set("limit",String(params.limit));
     if(params?.offset!==undefined) q.set("offset",String(params.offset));
     const s=q.toString()?`?${q}`:"";
@@ -106,7 +107,7 @@ export const api = {
   createOutcome: (treeId:number, taskId:number, body:{type:string;summary:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/outcome`,{method:"POST", body:JSON.stringify(body)}),
   updateOutcome: (treeId:number, outcomeId:number, body:{type?:string;summary?:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteOutcome: (treeId:number, outcomeId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"DELETE"}),
-  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}}>(`/api/v1/trees/${treeId}/research/summary`),
+  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}; sources?:{total:number}; evidence?:{total:number;supporting:number;contradicting:number}; assessment?:{no_evidence:number;weak:number;mixed:number;supported:number;strongly_supported:number}}>(`/api/v1/trees/${treeId}/research/summary`),
   // Sources
   getSources: (treeId:number, params?:{type?:string;limit?:number;offset?:number})=>{
     const q=new URLSearchParams();

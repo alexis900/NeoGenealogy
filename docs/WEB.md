@@ -56,7 +56,7 @@ No hay `fetch()` disperso.
 
 `web/src/api/types.ts` refleja exactamente DTOs de `docs/API.md`:
 
-`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome,has_outcome,opportunity}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at,evidence}, OutcomeType, ResearchSource, ResearchCitation, Evidence, EvidenceWithRelationship, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
+`TreeSummary, Person, Family, Finding, ResearchOpportunity {score,confidence,priority,researchability,why,what,potential_sources,breakdown:{total,components[]}}, ResearchTask {id,tree_id,opportunity_id,person_id,title,description,status,created_at,updated_at,started_at,completed_at,resolution,outcome,has_outcome,opportunity}, ResearchOutcome {id,tree_id,task_id,type,summary,details,created_at,updated_at,evidence,evidence_assessment}, OutcomeType, AssessmentStatus, EvidenceAssessment {score,status,evidence_total,supporting_count,contradicting_count,sources_count,cited_count,uncited_count,reasons}, EvidenceAssessmentReason, ResearchSource, ResearchCitation, Evidence, EvidenceWithRelationship, Branch, SourceCoverage, AnalysisRun, Paginated<T>, ApiError`
 
 No recalcula score/confidence.
 
@@ -90,10 +90,10 @@ Layout `web/src/components/Layout.tsx` con sidebar. TreeId se propaga por URL, n
 - **Dashboard**: `getTree` + `getTop(limit=5)` + `getTasks(limit=100)` → overview + Research Tasks summary (Open/In Progress/Resolved) + `Ver toda la cola →`
 - **Research Queue**: `getResearchOpportunities` con filtros `Priority, Sort(score/priority/confidence), min_score` → `ResearchOpportunityCard`; distinción `Research Queue` (automático) vs `Research Tasks` (humano).
 - **Opportunity Detail**: `ScoreBreakdown` + `Start Research` (`POST /research-opportunities/:id/tasks`) o `View Research Task` si ya existe.
-- **Research Workspace**: `getResearchSummary` + `getTasks(limit 5)` + `getOutcomes(limit 5)` → 3 bloques Opportunities (high/medium/low) + Active Tasks (OPEN/IN_PROGRESS) + Recent Outcomes + métricas `Evidence/Sources`.
+- **Research Workspace**: `getResearchSummary` + `getTasks(limit 5)` + `getOutcomes(limit 5)` → 3 bloques Opportunities (high/medium/low) + Active Tasks (OPEN/IN_PROGRESS) + Recent Outcomes + métricas `Evidence/Sources` + `Evidence Assessment` (No Evidence/Weak/Mixed/Supported/Strongly Supported desde mismo summary, sin queries extra).
 - **Research Tasks**: `getTasks` con filtros `status/has_outcome/person_id/opportunity_id` combinables, orden `IN_PROGRESS>OPEN>updated_at`, cards con `has_outcome` y `opportunity{score,priority}`.
-- **ResearchTask Detail**: `getTask`/`updateTask`/`deleteTask` + workflow `Start/Mark Resolved/Rejected/Inconclusive`; sección `Research Outcome` + `Evidence` (SUPPORTS/CONTRADICTS, Add Evidence con Source/Citation select, Statement/Notes, attach/detach); muestra `Original Research Opportunity`.
-- **Research History**: `getOutcomes(limit 20)` + `getOutcomeEvidence` por item → tabla Date/Type/Summary/Task + `Evidence: N`, filtros type/person, paginación.
+- **ResearchTask Detail**: `getTask`/`updateTask`/`deleteTask` + workflow `Start/Mark Resolved/Rejected/Inconclusive`; sección `Research Outcome` + `Evidence Assessment` (status/score 0..100/counts `supporting/contradicting/sources/citations`, `Why this assessment?` con `reasons`, warnings `CONFIRMED+NO_EVIDENCE` / `CONFIRMED+MIXED`) + `Evidence` (SUPPORTS/CONTRADICTS identificables, Add Evidence con Source/Citation select, Statement/Notes, attach/detach); muestra `Original Research Opportunity`.
+- **Research History**: `getOutcomes(limit 20, assessment_status)` → tabla Date/Type/Summary/Task + `Evidence: N` + `Assessment: STATUS · score`, filtros type/person/assessment_status (server-side), paginación, sin N+1, loading/empty/error/retry.
 - **ResearchSources**: `getSources` con type filter, create/edit/delete.
 - **SourceDetail**: `getSource` + `getCitations` con create/delete citation.
 - **Evidence**: `getEvidenceList` + create con Source/Citation.

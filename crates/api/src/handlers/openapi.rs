@@ -23,9 +23,9 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}": { "get": { "summary": "Get research task (outcome embedded)" }, "patch": { "summary": "Update research task" }, "delete": { "summary": "Delete research task" } },
             "/api/v1/trees/{tree_id}/research-opportunities/{opportunity_id}/tasks": { "post": { "summary": "Create task from opportunity" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/outcome": { "post": { "summary": "Create research outcome for task" } },
-            "/api/v1/trees/{tree_id}/research-outcomes": { "get": { "summary": "List research outcomes", "parameters": [{"name":"type"},{"name":"task_id"},{"name":"person_id"}] } },
-            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
-            "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes counts)" } },
+            "/api/v1/trees/{tree_id}/research-outcomes": { "get": { "summary": "List research outcomes", "parameters": [{"name":"type"},{"name":"task_id"},{"name":"person_id"},{"name":"assessment_status","description":"Filter by Evidence Assessment status: NO_EVIDENCE,WEAK,MIXED,SUPPORTED,STRONGLY_SUPPORTED"}] } },
+            "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}": { "get": { "summary": "Get research outcome", "description": "Returns outcome with evidence[] and evidence_assessment {score,status,evidence_total,supporting_count,contradicting_count,sources_count,cited_count,uncited_count,reasons[{code,points,message}]}" }, "patch": { "summary": "Update research outcome" }, "delete": { "summary": "Delete research outcome" } },
+            "/api/v1/trees/{tree_id}/research/summary": { "get": { "summary": "Research summary (opportunities/tasks/outcomes/sources/evidence/assessment counts)" } },
             "/api/v1/trees/{tree_id}/sources": { "get": { "summary": "List research sources", "parameters": [{"name":"type"}] }, "post": { "summary": "Create research source" } },
             "/api/v1/trees/{tree_id}/sources/{source_id}": { "get": { "summary": "Get research source" }, "patch": { "summary": "Update research source" }, "delete": { "summary": "Delete research source" } },
             "/api/v1/trees/{tree_id}/sources/{source_id}/citations": { "get": { "summary": "List citations for source" }, "post": { "summary": "Create citation" } },
@@ -34,6 +34,59 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/evidence/{evidence_id}": { "get": { "summary": "Get evidence" }, "patch": { "summary": "Update evidence" }, "delete": { "summary": "Delete evidence" } },
             "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}/evidence": { "get": { "summary": "List outcome evidence" } },
             "/api/v1/trees/{tree_id}/research-outcomes/{outcome_id}/evidence/{evidence_id}": { "post": { "summary": "Attach evidence to outcome" }, "delete": { "summary": "Detach evidence from outcome" } },
+        },
+        "components": {
+            "schemas": {
+                "EvidenceStats": {
+                    "type": "object",
+                    "properties": {
+                        "evidence_total": { "type": "integer" },
+                        "supporting_count": { "type": "integer" },
+                        "contradicting_count": { "type": "integer" },
+                        "sources_count": { "type": "integer" },
+                        "cited_count": { "type": "integer" },
+                        "uncited_count": { "type": "integer" },
+                        "cited_supporting_count": { "type": "integer" }
+                    }
+                },
+                "EvidenceAssessmentReason": {
+                    "type": "object",
+                    "properties": {
+                        "code": { "type": "string", "example": "SUPPORTING_EVIDENCE" },
+                        "points": { "type": "integer", "example": 30 },
+                        "message": { "type": "string", "example": "Supporting evidence exists" }
+                    }
+                },
+                "EvidenceAssessment": {
+                    "type": "object",
+                    "properties": {
+                        "score": { "type": "integer", "minimum": 0, "maximum": 100 },
+                        "status": { "type": "string", "enum": ["NO_EVIDENCE","WEAK","MIXED","SUPPORTED","STRONGLY_SUPPORTED"] },
+                        "evidence_total": { "type": "integer" },
+                        "supporting_count": { "type": "integer" },
+                        "contradicting_count": { "type": "integer" },
+                        "sources_count": { "type": "integer" },
+                        "cited_count": { "type": "integer" },
+                        "uncited_count": { "type": "integer" },
+                        "reasons": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceAssessmentReason" } }
+                    }
+                },
+                "ResearchOutcome": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "integer" },
+                        "tree_id": { "type": "integer" },
+                        "task_id": { "type": "integer" },
+                        "type": { "type": "string", "enum": ["CONFIRMED","FALSE_LEAD","INCONCLUSIVE","NEW_LEAD","NO_EVIDENCE"] },
+                        "summary": { "type": "string" },
+                        "details": { "type": "string", "nullable": true },
+                        "created_at": { "type": "string" },
+                        "updated_at": { "type": "string" },
+                        "evidence": { "type": "array" },
+                        "evidence_assessment": { "$ref": "#/components/schemas/EvidenceAssessment" }
+                    }
+                }
+            }
         }
     }))
 }

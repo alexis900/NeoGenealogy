@@ -69,10 +69,29 @@ export interface ResearchTask {
 
 export type OutcomeType = "CONFIRMED" | "FALSE_LEAD" | "INCONCLUSIVE" | "NEW_LEAD" | "NO_EVIDENCE";
 
+export type AssessmentStatus = "NO_EVIDENCE" | "WEAK" | "MIXED" | "SUPPORTED" | "STRONGLY_SUPPORTED";
+
+export interface EvidenceAssessmentReason {
+  code:string; points:number; message:string;
+}
+
+export interface EvidenceAssessment {
+  score:number; status:AssessmentStatus;
+  evidence_total:number; supporting_count:number; contradicting_count:number;
+  sources_count:number; cited_count:number; uncited_count:number;
+  reasons: EvidenceAssessmentReason[];
+}
+
+export interface EvidenceStats {
+  evidence_total:number; supporting_count:number; contradicting_count:number;
+  sources_count:number; cited_count:number; uncited_count:number; cited_supporting_count:number;
+}
+
 export interface ResearchOutcome {
   id:number; tree_id:number; task_id:number; type:OutcomeType; summary:string; details?:string|null;
   created_at:string; updated_at:string;
   evidence?: EvidenceWithRelationship[];
+  evidence_assessment?: EvidenceAssessment | null;
 }
 
 export type SourceType = "BOOK"|"REGISTER"|"CENSUS"|"CIVIL_RECORD"|"PARISH_RECORD"|"NEWSPAPER"|"WEBSITE"|"OTHER";

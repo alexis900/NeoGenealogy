@@ -649,12 +649,55 @@ impl Storage {
                 .fetch_one(&self.pool)
                 .await
                 .unwrap_or(0);
+        let evidence_supporting: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM outcome_evidence oe JOIN research_outcomes ro ON oe.outcome_id = ro.id WHERE ro.tree_id=?1 AND oe.relationship='SUPPORTS'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let evidence_contradicting: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM outcome_evidence oe JOIN research_outcomes ro ON oe.outcome_id = ro.id WHERE ro.tree_id=?1 AND oe.relationship='CONTRADICTS'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        // assessment distribution
+        let outcome_ids: Vec<i64> =
+            sqlx::query_scalar("SELECT id FROM research_outcomes WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_all(&self.pool)
+                .await
+                .unwrap_or_default();
+        let assessments = self
+            .get_outcomes_assessments(&outcome_ids)
+            .await
+            .unwrap_or_default();
+        let mut cnt_no = 0;
+        let mut cnt_weak = 0;
+        let mut cnt_mixed = 0;
+        let mut cnt_supported = 0;
+        let mut cnt_strong = 0;
+        for a in assessments.values() {
+            match a.status.as_str() {
+                "NO_EVIDENCE" => cnt_no += 1,
+                "WEAK" => cnt_weak += 1,
+                "MIXED" => cnt_mixed += 1,
+                "SUPPORTED" => cnt_supported += 1,
+                "STRONGLY_SUPPORTED" => cnt_strong += 1,
+                _ => {}
+            }
+        }
+        // outcomes with no evidence not in map are NO_EVIDENCE (already counted via batch fills)
+        // but batch fills missing with NO_EVIDENCE, so counts are correct
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
             "outcomes": { "total": outcomes_total },
             "sources": { "total": sources_total },
-            "evidence": { "total": evidence_total }
+            "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
+            "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong }
         }))
     }
 
@@ -1458,5 +1501,140 @@ impl Storage {
             }));
         }
         Ok(result)
+    }
+
+    pub async fn get_outcome_evidence_stats(
+        &self,
+        outcome_id: i64,
+    ) -> Result<crate::assessment::EvidenceStats, StorageError> {
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            evidence_total: i64,
+            supporting: Option<i64>,
+            contradicting: Option<i64>,
+            sources: Option<i64>,
+            cited: Option<i64>,
+            uncited: Option<i64>,
+            cited_supporting: Option<i64>,
+        }
+        let row = sqlx::query_as::<_, Row>(
+            "SELECT COUNT(*) as evidence_total,
+                    COALESCE(SUM(CASE WHEN oe.relationship='SUPPORTS' THEN 1 ELSE 0 END),0) as supporting,
+                    COALESCE(SUM(CASE WHEN oe.relationship='CONTRADICTS' THEN 1 ELSE 0 END),0) as contradicting,
+                    COALESCE(COUNT(DISTINCT e.source_id),0) as sources,
+                    COALESCE(SUM(CASE WHEN e.citation_id IS NOT NULL THEN 1 ELSE 0 END),0) as cited,
+                    COALESCE(SUM(CASE WHEN e.citation_id IS NULL THEN 1 ELSE 0 END),0) as uncited,
+                    COALESCE(SUM(CASE WHEN oe.relationship='SUPPORTS' AND e.citation_id IS NOT NULL THEN 1 ELSE 0 END),0) as cited_supporting
+             FROM outcome_evidence oe
+             JOIN evidence e ON e.id = oe.evidence_id
+             WHERE oe.outcome_id = ?1",
+        )
+        .bind(outcome_id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(crate::assessment::EvidenceStats {
+            evidence_total: row.evidence_total,
+            supporting_count: row.supporting.unwrap_or(0),
+            contradicting_count: row.contradicting.unwrap_or(0),
+            sources_count: row.sources.unwrap_or(0),
+            cited_count: row.cited.unwrap_or(0),
+            uncited_count: row.uncited.unwrap_or(0),
+            cited_supporting_count: row.cited_supporting.unwrap_or(0),
+        })
+    }
+
+    pub async fn get_outcomes_evidence_stats(
+        &self,
+        outcome_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, crate::assessment::EvidenceStats>, StorageError>
+    {
+        if outcome_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        #[derive(sqlx::FromRow)]
+        struct Row {
+            outcome_id: i64,
+            evidence_total: i64,
+            supporting: Option<i64>,
+            contradicting: Option<i64>,
+            sources: Option<i64>,
+            cited: Option<i64>,
+            uncited: Option<i64>,
+            cited_supporting: Option<i64>,
+        }
+        let placeholders = outcome_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT oe.outcome_id as outcome_id,
+                    COUNT(*) as evidence_total,
+                    COALESCE(SUM(CASE WHEN oe.relationship='SUPPORTS' THEN 1 ELSE 0 END),0) as supporting,
+                    COALESCE(SUM(CASE WHEN oe.relationship='CONTRADICTS' THEN 1 ELSE 0 END),0) as contradicting,
+                    COALESCE(COUNT(DISTINCT e.source_id),0) as sources,
+                    COALESCE(SUM(CASE WHEN e.citation_id IS NOT NULL THEN 1 ELSE 0 END),0) as cited,
+                    COALESCE(SUM(CASE WHEN e.citation_id IS NULL THEN 1 ELSE 0 END),0) as uncited,
+                    COALESCE(SUM(CASE WHEN oe.relationship='SUPPORTS' AND e.citation_id IS NOT NULL THEN 1 ELSE 0 END),0) as cited_supporting
+             FROM outcome_evidence oe
+             JOIN evidence e ON e.id = oe.evidence_id
+             WHERE oe.outcome_id IN ({placeholders})
+             GROUP BY oe.outcome_id"
+        );
+        let mut q = sqlx::query_as::<_, Row>(&sql);
+        for id in outcome_ids {
+            q = q.bind(id);
+        }
+        let rows = q.fetch_all(&self.pool).await?;
+        let mut map: std::collections::HashMap<i64, crate::assessment::EvidenceStats> =
+            std::collections::HashMap::new();
+        for r in rows {
+            map.insert(
+                r.outcome_id,
+                crate::assessment::EvidenceStats {
+                    evidence_total: r.evidence_total,
+                    supporting_count: r.supporting.unwrap_or(0),
+                    contradicting_count: r.contradicting.unwrap_or(0),
+                    sources_count: r.sources.unwrap_or(0),
+                    cited_count: r.cited.unwrap_or(0),
+                    uncited_count: r.uncited.unwrap_or(0),
+                    cited_supporting_count: r.cited_supporting.unwrap_or(0),
+                },
+            );
+        }
+        // fill missing with zero stats
+        for id in outcome_ids {
+            map.entry(*id).or_insert(crate::assessment::EvidenceStats {
+                evidence_total: 0,
+                supporting_count: 0,
+                contradicting_count: 0,
+                sources_count: 0,
+                cited_count: 0,
+                uncited_count: 0,
+                cited_supporting_count: 0,
+            });
+        }
+        Ok(map)
+    }
+
+    pub async fn get_outcome_assessment(
+        &self,
+        outcome_id: i64,
+    ) -> Result<crate::assessment::EvidenceAssessment, StorageError> {
+        let stats = self.get_outcome_evidence_stats(outcome_id).await?;
+        Ok(crate::assessment::calculate_evidence_assessment(&stats))
+    }
+
+    pub async fn get_outcomes_assessments(
+        &self,
+        outcome_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, crate::assessment::EvidenceAssessment>, StorageError>
+    {
+        let stats_map = self.get_outcomes_evidence_stats(outcome_ids).await?;
+        let mut res = std::collections::HashMap::new();
+        for (id, stats) in stats_map {
+            res.insert(id, crate::assessment::calculate_evidence_assessment(&stats));
+        }
+        Ok(res)
     }
 }

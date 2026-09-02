@@ -1,0 +1,10 @@
+services:
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    volumes:
+      - .:/app
+      - /app/target
+      - /app/web/node_modules
+    command: sh -c "cargo test --workspace && npm --prefix web run test"

@@ -16,6 +16,7 @@ pub struct OutcomeListParams {
     pub r#type: Option<String>,
     pub task_id: Option<i64>,
     pub person_id: Option<i64>,
+    pub assessment_status: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -74,6 +75,20 @@ async fn to_json_with_evidence(
         .list_outcome_evidence_detailed(row.id)
         .await
         .unwrap_or_default();
+    let assessment = state.storage.get_outcome_assessment(row.id).await.ok();
+    let assessment_json = assessment.map(|a| {
+        serde_json::json!({
+            "score": a.score,
+            "status": a.status,
+            "evidence_total": a.evidence_total,
+            "supporting_count": a.supporting_count,
+            "contradicting_count": a.contradicting_count,
+            "sources_count": a.sources_count,
+            "cited_count": a.cited_count,
+            "uncited_count": a.uncited_count,
+            "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
+        })
+    }).unwrap_or(serde_json::json!(null));
     serde_json::json!({
         "id": row.id,
         "tree_id": row.tree_id,
@@ -83,8 +98,26 @@ async fn to_json_with_evidence(
         "details": row.details,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
-        "evidence": evidence
+        "evidence": evidence,
+        "evidence_assessment": assessment_json
     })
+}
+
+fn validate_assessment_status(s: &str) -> Result<(), ApiError> {
+    let allowed = [
+        "NO_EVIDENCE",
+        "WEAK",
+        "MIXED",
+        "SUPPORTED",
+        "STRONGLY_SUPPORTED",
+    ];
+    if !allowed.contains(&s) {
+        return Err(ApiError::bad_request(
+            "INVALID_ASSESSMENT_STATUS",
+            format!("assessment_status must be one of {}", allowed.join(",")),
+        ));
+    }
+    Ok(())
 }
 
 pub async fn list_outcomes(
@@ -104,6 +137,9 @@ pub async fn list_outcomes(
     if let Some(ref t) = params.r#type {
         validate_type(&t.to_uppercase())?;
     }
+    if let Some(ref a) = params.assessment_status {
+        validate_assessment_status(&a.to_uppercase())?;
+    }
     let limit = params.limit.unwrap_or(50);
     let offset = params.offset.unwrap_or(0);
     if !(0..=100).contains(&limit) {
@@ -113,6 +149,85 @@ pub async fn list_outcomes(
         return Err(ApiError::bad_request("INVALID_OFFSET", "offset >=0"));
     }
     let ttype = params.r#type.as_deref().map(|s| s.to_uppercase());
+    let assessment_filter = params
+        .assessment_status
+        .as_deref()
+        .map(|s| s.to_uppercase());
+
+    // If assessment filter present, need to fetch all and filter in Rust to avoid N+1, then paginate
+    if let Some(ref filter_status) = assessment_filter {
+        // fetch all matching other filters (without pagination)
+        let (all_rows, _) = if params.person_id.is_some() {
+            state
+                .storage
+                .list_research_outcomes_with_person(
+                    tree_id,
+                    ttype.as_deref(),
+                    params.person_id,
+                    1000,
+                    0,
+                )
+                .await?
+        } else {
+            state
+                .storage
+                .list_research_outcomes(tree_id, ttype.as_deref(), params.task_id, 1000, 0)
+                .await?
+        };
+        let ids: Vec<i64> = all_rows.iter().map(|r| r.id).collect();
+        let assessments = state
+            .storage
+            .get_outcomes_assessments(&ids)
+            .await
+            .unwrap_or_default();
+        let mut filtered: Vec<serde_json::Value> = Vec::new();
+        for row in all_rows {
+            let assessment = assessments.get(&row.id);
+            let status = assessment
+                .map(|a| a.status.as_str())
+                .unwrap_or("NO_EVIDENCE");
+            if status == filter_status.as_str() {
+                // enrich with assessment and evidence
+                let evidence = state
+                    .storage
+                    .list_outcome_evidence_detailed(row.id)
+                    .await
+                    .unwrap_or_default();
+                let assessment_json = assessments.get(&row.id).map(|a| {
+                    serde_json::json!({
+                        "score": a.score,
+                        "status": a.status,
+                        "evidence_total": a.evidence_total,
+                        "supporting_count": a.supporting_count,
+                        "contradicting_count": a.contradicting_count,
+                        "sources_count": a.sources_count,
+                        "cited_count": a.cited_count,
+                        "uncited_count": a.uncited_count,
+                        "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
+                    })
+                }).unwrap_or(serde_json::json!(null));
+                let mut v = to_json(row);
+                v["evidence"] = serde_json::json!(evidence);
+                v["evidence_assessment"] = assessment_json;
+                filtered.push(v);
+            }
+        }
+        let total = filtered.len() as i64;
+        let paginated: Vec<serde_json::Value> = filtered
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+        return Ok(Json(Paginated {
+            items: paginated,
+            pagination: PaginationMeta {
+                limit,
+                offset,
+                total,
+            },
+        }));
+    }
+
     let (rows, total) = if params.person_id.is_some() {
         state
             .storage
@@ -130,7 +245,49 @@ pub async fn list_outcomes(
             .list_research_outcomes(tree_id, ttype.as_deref(), params.task_id, limit, offset)
             .await?
     };
-    let items = rows.into_iter().map(to_json).collect();
+    // batch assessment for listed rows
+    let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let assessments = state
+        .storage
+        .get_outcomes_assessments(&ids)
+        .await
+        .unwrap_or_default();
+    let mut items = Vec::new();
+    for row in rows {
+        let evidence = state
+            .storage
+            .list_outcome_evidence_detailed(row.id)
+            .await
+            .unwrap_or_default();
+        let assessment = assessments.get(&row.id);
+        let assessment_json = assessment.map(|a| {
+            serde_json::json!({
+                "score": a.score,
+                "status": a.status,
+                "evidence_total": a.evidence_total,
+                "supporting_count": a.supporting_count,
+                "contradicting_count": a.contradicting_count,
+                "sources_count": a.sources_count,
+                "cited_count": a.cited_count,
+                "uncited_count": a.uncited_count,
+                "reasons": a.reasons.iter().map(|r| serde_json::json!({"code": r.code, "points": r.points, "message": r.message})).collect::<Vec<_>>()
+            })
+        }).unwrap_or(serde_json::json!({
+            "score": 0,
+            "status": "NO_EVIDENCE",
+            "evidence_total": 0,
+            "supporting_count": 0,
+            "contradicting_count": 0,
+            "sources_count": 0,
+            "cited_count": 0,
+            "uncited_count": 0,
+            "reasons": []
+        }));
+        let mut v = to_json(row);
+        v["evidence"] = serde_json::json!(evidence);
+        v["evidence_assessment"] = assessment_json;
+        items.push(v);
+    }
     Ok(Json(Paginated {
         items,
         pagination: PaginationMeta {

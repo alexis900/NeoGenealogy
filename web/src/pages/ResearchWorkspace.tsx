@@ -24,13 +24,8 @@ export default function ResearchWorkspace(){
       const s=await api.getResearchSummary(id);
       setSummary(s);
       setOppsCounts(s.opportunities);
-      // active tasks: IN_PROGRESS first then OPEN, limit 5
-      // fetch IN_PROGRESS and OPEN separately or combined with ordering backend does
       const tasksRes=await api.getTasks(id,{limit:5});
-      // backend orders IN_PROGRESS first, then OPEN, then rest by updated_at
-      // filter to only OPEN and IN_PROGRESS for the block
       const active=tasksRes.items.filter((t:any)=> t.status==="IN_PROGRESS"||t.status==="OPEN").slice(0,5);
-      // if still less, just show what we have
       setActiveTasks(active);
       const outcomes=await api.getOutcomes(id,{limit:5});
       setRecentOutcomes(outcomes.items);
@@ -98,6 +93,7 @@ export default function ResearchWorkspace(){
             <div className="flex gap-2 items-center">
               <span className="px-2 py-1 bg-emerald-100 rounded text-xs font-semibold">{formatOutcomeType(o.type)}</span>
               <span className="text-xs text-gray-600">{new Date(o.created_at).toLocaleDateString()}</span>
+              {o.evidence_assessment && <span className="text-xs text-gray-600">{o.evidence_assessment.status} · {o.evidence_assessment.score}</span>}
             </div>
             <div className="text-sm font-medium mt-1">{o.summary}</div>
             <div className="text-xs text-gray-600">Task {o.task_id} · Person linkage via task</div>
@@ -112,6 +108,18 @@ export default function ResearchWorkspace(){
         <Link to={`/trees/${id}/sources`} className="text-sm text-blue-600 underline">View Sources</Link>
         <Link to={`/trees/${id}/evidence`} className="text-sm text-blue-600 underline">View Evidence</Link>
       </div>
+      {summary.assessment && (
+        <div className="mt-3 border-t pt-3">
+          <div className="text-sm font-semibold">Evidence Assessment</div>
+          <div className="text-xs text-gray-700 mt-1 space-y-0.5">
+            <div>No Evidence: <strong>{summary.assessment.no_evidence ?? 0}</strong></div>
+            <div>Weak: <strong>{summary.assessment.weak ?? 0}</strong></div>
+            <div>Mixed: <strong>{summary.assessment.mixed ?? 0}</strong></div>
+            <div>Supported: <strong>{summary.assessment.supported ?? 0}</strong></div>
+            <div>Strongly Supported: <strong>{summary.assessment.strongly_supported ?? 0}</strong></div>
+          </div>
+        </div>
+      )}
     </div>}
   </div>
 }

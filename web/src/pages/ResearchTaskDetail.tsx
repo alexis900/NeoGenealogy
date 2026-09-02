@@ -9,6 +9,9 @@ function formatOutcomeType(t:string){
   const map:any={"CONFIRMED":"Confirmed","FALSE_LEAD":"False lead","INCONCLUSIVE":"Inconclusive","NEW_LEAD":"New lead","NO_EVIDENCE":"No evidence found"};
   return map[t]||t;
 }
+function formatAssessmentStatus(s:string){
+  return s.replace(/_/g," ");
+}
 
 export default function ResearchTaskDetail(){
   const {treeId, taskId}=useParams(); const tid=Number(treeId); const id=Number(taskId);
@@ -21,6 +24,7 @@ export default function ResearchTaskDetail(){
   const [outcomeSummary,setOutcomeSummary]=useState(""); const [outcomeDetails,setOutcomeDetails]=useState("");
   const [outcomeSaving,setOutcomeSaving]=useState(false);
   const [evidence,setEvidence]=useState<any[]>([]);
+  const [assessment,setAssessment]=useState<any>(null);
   const [sources,setSources]=useState<any[]>([]);
   const [citations,setCitations]=useState<any[]>([]);
   const [showAddEvidence,setShowAddEvidence]=useState(false);
@@ -37,9 +41,10 @@ export default function ResearchTaskDetail(){
         try{
           const detailed=await api.getOutcome(tid,t.outcome.id);
           setEvidence(detailed.evidence||[]);
-        }catch{ setEvidence([]); }
+          setAssessment((detailed as any).evidence_assessment || null);
+        }catch{ setEvidence([]); setAssessment(null); }
       } else {
-        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]);
+        setOutcomeType("CONFIRMED"); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null);
       }
       if(t.opportunity_id){
         try{
@@ -85,7 +90,16 @@ export default function ResearchTaskDetail(){
     setOutcomeSaving(true);
     try{
       const o=await api.createOutcome(tid,id,{type:outcomeType, summary:outcomeSummary, details:outcomeDetails||undefined});
-      setTask({...task, outcome:o}); setEvidence([]);
+      try{
+        const detailed=await api.getOutcome(tid, o.id);
+        if((detailed as any).id===o.id){
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null);
+        } else {
+          setTask({...task, outcome:o}); setEvidence([]); setAssessment(null);
+        }
+      }catch{
+        setTask({...task, outcome:o}); setEvidence([]); setAssessment(null);
+      }
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
   const updateOutcome=async()=>{
@@ -93,7 +107,16 @@ export default function ResearchTaskDetail(){
     setOutcomeSaving(true);
     try{
       const o=await api.updateOutcome(tid,task.outcome.id,{type:outcomeType, summary:outcomeSummary, details:outcomeDetails||undefined});
-      setTask({...task, outcome:o});
+      try{
+        const detailed=await api.getOutcome(tid,task.outcome.id);
+        if((detailed as any).id===task.outcome.id){
+          setTask({...task, outcome:detailed}); setEvidence((detailed as any).evidence||[]); setAssessment((detailed as any).evidence_assessment||null);
+        } else {
+          setTask({...task, outcome:o});
+        }
+      }catch{
+        setTask({...task, outcome:o});
+      }
     }catch(e:any){setErr(e.message)} finally{setOutcomeSaving(false)}
   };
   const deleteOutcome=async()=>{
@@ -101,7 +124,7 @@ export default function ResearchTaskDetail(){
     if(!confirm("Delete outcome?")) return;
     try{
       await api.deleteOutcome(tid,task.outcome.id);
-      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]);
+      setTask({...task, outcome:null}); setOutcomeSummary(""); setOutcomeDetails(""); setEvidence([]); setAssessment(null);
     }catch(e:any){setErr(e.message)}
   };
   const addEvidence=async()=>{
@@ -113,6 +136,7 @@ export default function ResearchTaskDetail(){
       await api.attachEvidence(tid, task.outcome.id, ev.id, {relationship: evRelationship});
       const detailed=await api.getOutcome(tid, task.outcome.id);
       setEvidence(detailed.evidence||[]);
+      setAssessment((detailed as any).evidence_assessment||null);
       setEvStatement(""); setEvNotes(""); setEvCitationId(""); setEvSourceId(""); setShowAddEvidence(false);
     }catch(e:any){setErr(e.message)} finally{setEvSaving(false)}
   };
@@ -123,6 +147,7 @@ export default function ResearchTaskDetail(){
       await api.detachEvidence(tid, task.outcome.id, evidenceId);
       const detailed=await api.getOutcome(tid, task.outcome.id);
       setEvidence(detailed.evidence||[]);
+      setAssessment((detailed as any).evidence_assessment||null);
     }catch(e:any){setErr(e.message)}
   };
 
@@ -171,6 +196,40 @@ export default function ResearchTaskDetail(){
           <div className="flex gap-2 items-center"><span className="px-2 py-1 bg-emerald-100 rounded text-sm font-semibold">{formatOutcomeType(task.outcome.type)}</span><span className="text-xs text-gray-600">{new Date(task.outcome.created_at).toLocaleString()}</span></div>
           <div><div className="text-sm font-semibold">Summary</div><div className="text-sm">{task.outcome.summary}</div></div>
           {task.outcome.details && <div><div className="text-sm font-semibold">Details</div><div className="text-sm whitespace-pre-wrap">{task.outcome.details}</div></div>}
+
+          {/* Evidence Assessment */}
+          {assessment && (
+            <div className="border rounded p-3 bg-gray-50 space-y-2">
+              <div className="text-sm font-semibold">Evidence Assessment</div>
+              <div className="flex flex-col gap-1">
+                <span className="inline-block px-2 py-1 bg-white border rounded text-sm font-semibold w-fit">{formatAssessmentStatus(assessment.status)}</span>
+                <span className="text-sm">{assessment.score} / 100</span>
+                <div className="text-xs text-gray-700 space-y-0.5">
+                  <div>{assessment.supporting_count} supporting</div>
+                  <div>{assessment.contradicting_count} contradicting</div>
+                  <div>{assessment.sources_count} sources</div>
+                  <div>{assessment.cited_count} citations</div>
+                </div>
+                {task.outcome.type==="CONFIRMED" && assessment.status==="NO_EVIDENCE" && (
+                  <div className="mt-2 text-sm text-amber-800 bg-amber-100 border border-amber-200 rounded px-3 py-2">This outcome is marked as CONFIRMED but has no recorded supporting evidence.</div>
+                )}
+                {task.outcome.type==="CONFIRMED" && assessment.status==="MIXED" && (
+                  <div className="mt-2 text-sm text-orange-800 bg-orange-100 border border-orange-200 rounded px-3 py-2">This outcome has contradictory evidence.</div>
+                )}
+              </div>
+              {assessment.reasons && assessment.reasons.length>0 && (
+                <div className="mt-2 border-t pt-2">
+                  <div className="text-sm font-semibold">Why this assessment?</div>
+                  <ul className="text-xs text-gray-700 space-y-1 mt-1">
+                    {assessment.reasons.map((r:any, idx:number)=>(
+                      <li key={idx}>{r.points>0?`+${r.points}`:r.points} {r.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="border rounded p-3 bg-gray-50">
             <div className="flex justify-between items-center mb-2"><h4 className="font-semibold">Evidence</h4><span className="text-xs text-gray-600">{evidence.length} attached</span></div>
             {evidence.length===0 ? <div className="text-sm text-gray-500">No evidence attached yet.</div> :

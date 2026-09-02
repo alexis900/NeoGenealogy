@@ -1,3 +1,4 @@
+pub mod assessment;
 pub mod db;
 pub mod error;
 pub mod import;
