@@ -267,6 +267,28 @@ GET /api/v1/trees/:tree_id/research/plan?limit=10&min_score=70&priority=high&res
 
 Ver `docs/RESEARCH_PLANNING.md`.
 
+## Research Sessions — Fase 5.2
+
+```
+GET    /api/v1/trees/:tree_id/research-sessions?status=ACTIVE&person_id=5&opportunity_id=10&limit=20 → {items:[{id,tree_id,title,description,status,person_id,opportunity_id,created_at,updated_at,started_at,completed_at}], pagination}
+POST   /api/v1/trees/:tree_id/research-sessions {title, description?, person_id?, opportunity_id?} → 201 {session, person, opportunity, tasks, summary}
+GET    /api/v1/trees/:tree_id/research-sessions/:session_id → {session, person, opportunity, tasks:[{...has_outcome}], summary:{total_tasks,open_tasks,in_progress_tasks,terminal_tasks,outcomes_count}}
+PATCH  /api/v1/trees/:tree_id/research-sessions/:session_id {title?, description?, status?, person_id?, opportunity_id?} → 200 (actualiza started_at/completed_at/updated_at)
+DELETE /api/v1/trees/:tree_id/research-sessions/:session_id → 204 (tasks SET NULL)
+POST   /api/v1/trees/:tree_id/research-tasks/:task_id/session {session_id} → 200 (valida mismo tree)
+DELETE /api/v1/trees/:tree_id/research-tasks/:task_id/session → 200
+GET    /api/v1/trees/:tree_id/research-sessions/:session_id/tasks → Paginated
+POST   /api/v1/research-sessions {tree_id,title,...} → 201 (generic)
+```
+
+- `status` ∈ PLANNED,ACTIVE,COMPLETED,ABANDONED (validado 400 `INVALID_SESSION_STATUS`); orden `ACTIVE>PLANNED>COMPLETED>ABANDONED, updated_at DESC`
+- `session.summary` derivado `terminal = RESOLVED|REJECTED|INCONCLUSIVE`; `progress = terminal/total` solo presentación
+- `COMPLETED/ABANDONED → started_at/completed_at` manejado; `reopen → completed_at = NULL`
+- Tree isolation: `tree_id` en path, `person_id`/`opportunity_id`/`session_id` deben pertenecer al mismo árbol, cross-tree → 404; `opportunity ON DELETE SET NULL` mantiene session
+- `GET tasks` incluye `session {id,title,status}` batch sin N+1
+
+Ver `docs/RESEARCH_SESSIONS.md`.
+
 ## Errores
 
 ```json

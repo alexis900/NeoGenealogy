@@ -22,3 +22,7 @@ export function TaskStatusBadge({status}:{status:string}){
   const label = status.replace("_"," ");
   return <span className={`px-2 py-0.5 rounded text-xs font-semibold text-white ${map[status]||"bg-gray-400"}`}>{label}</span>
 }
+export function SessionStatusBadge({status}:{status:string}){
+  const map:any={PLANNED:"bg-blue-600",ACTIVE:"bg-emerald-600",COMPLETED:"bg-gray-600",ABANDONED:"bg-red-600"};
+  return <span className={`px-2 py-0.5 rounded text-xs font-semibold text-white ${map[status]||"bg-gray-400"}`}>{status}</span>
+}

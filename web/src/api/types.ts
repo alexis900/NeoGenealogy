@@ -65,6 +65,8 @@ export interface ResearchTask {
   outcome?: ResearchOutcome | null;
   has_outcome?: boolean;
   opportunity?: { id:number; score?:number; priority?:string; why?:string } | null;
+  session_id?: number | null;
+  session?: { id:number; title:string; status:ResearchSessionStatus } | null;
 }
 
 export type OutcomeType = "CONFIRMED" | "FALSE_LEAD" | "INCONCLUSIVE" | "NEW_LEAD" | "NO_EVIDENCE";
@@ -172,6 +174,27 @@ export interface ResearchPlanSummary {
 export interface ResearchPlan {
   generated_at:string; total_candidates:number; summary:ResearchPlanSummary;
   recommended: ResearchPlanItem[]; deferred: ResearchPlanItem[];
+}
+
+export type ResearchSessionStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "ABANDONED";
+export interface ResearchSession {
+  id:number; tree_id:number; title:string; description?:string|null; status:ResearchSessionStatus;
+  person_id?:number|null; opportunity_id?:number|null;
+  created_at:string; updated_at:string; started_at?:string|null; completed_at?:string|null;
+  person?: {id:number; name:string; gedcom_id:string} | null;
+  opportunity?: {id:number; title:string; priority?:string|null; score?:number|null; person_id:number} | null;
+  tasks?: ResearchTask[];
+  summary?: ResearchSessionSummary;
+}
+export interface ResearchSessionSummary {
+  total_tasks:number; open_tasks:number; in_progress_tasks:number; terminal_tasks:number; outcomes_count:number;
+}
+export interface ResearchSessionDetail {
+  session: ResearchSession;
+  person: {id:number; name:string; gedcom_id:string} | null;
+  opportunity: {id:number; title:string; priority?:string|null; score?:number|null; person_id:number} | null;
+  tasks: ResearchTask[];
+  summary: ResearchSessionSummary;
 }
 
 export interface ApiErrorBody { error:{code:string; message:string} }

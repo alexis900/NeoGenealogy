@@ -16,6 +16,8 @@ export default function ResearchWorkspace(){
   const [recentOutcomes,setRecentOutcomes]=useState<any[]>([]);
   const [oppsCounts,setOppsCounts]=useState<{high:number;medium:number;low:number}|null>(null);
   const [planPreview,setPlanPreview]=useState<any>(null);
+  const [sessionsPreview,setSessionsPreview]=useState<any>(null);
+  const [currentSession,setCurrentSession]=useState<any>(null);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState<string|null>(null);
 
@@ -36,6 +38,18 @@ export default function ResearchWorkspace(){
       } catch{
         // planning optional - overview remains stable if it fails
       }
+      try{
+        const sess=await api.getSessions(id,{limit:20});
+        setSessionsPreview(sess);
+        const active=sess.items.filter((s:any)=>s.status==="ACTIVE");
+        // pick first active with tasks
+        if(active.length>0){
+          try{
+            const detail=await api.getSession(id,active[0].id);
+            setCurrentSession(detail);
+          }catch{}
+        }
+      }catch{}
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load()},[id]);
@@ -53,6 +67,19 @@ export default function ResearchWorkspace(){
       <Link to={`/trees/${id}/research/tasks`} className="px-3 py-1 border rounded hover:bg-gray-50">Tasks</Link>
       <Link to={`/trees/${id}/research/history`} className="px-3 py-1 border rounded hover:bg-gray-50">History</Link>
     </nav>
+
+    {/* Research Sessions overview */}
+    <div className="border rounded p-4 bg-white">
+      <h2 className="font-semibold">Research Sessions</h2>
+      {sessionsPreview ? <div className="text-sm text-gray-600 mt-1">Active {sessionsPreview.items.filter((s:any)=>s.status==="ACTIVE").length} · Planned {sessionsPreview.items.filter((s:any)=>s.status==="PLANNED").length}</div> : <div className="text-sm text-gray-600 mt-1">Sessions track what you are working on now.</div>}
+      {currentSession && <div className="mt-3 border rounded p-3 bg-gray-50">
+        <div className="text-xs text-gray-600">Current Session</div>
+        <div className="font-medium text-sm">{currentSession.session.title}</div>
+        <div className="text-xs text-gray-600">{currentSession.summary.terminal_tasks} / {currentSession.summary.total_tasks} tasks completed</div>
+        <Link to={`/trees/${id}/research/sessions/${currentSession.session.id}`} className="text-xs text-blue-600 underline">Continue</Link>
+      </div>}
+      <Link to={`/trees/${id}/research/sessions`} className="text-sm text-blue-600 underline mt-2 inline-block">View Sessions →</Link>
+    </div>
 
     {/* What should I research next? - Planning preview */}
     <div className="border rounded p-4 bg-white">

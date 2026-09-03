@@ -74,6 +74,7 @@ fn to_json(row: neogenealogy_storage::models::ResearchTaskRow) -> serde_json::Va
     })
 }
 
+#[allow(dead_code)]
 fn to_json_with_has_outcome(
     row: neogenealogy_storage::models::ResearchTaskRow,
     has_outcome: bool,
@@ -94,7 +95,36 @@ fn to_json_with_has_outcome(
         "resolution": row.resolution,
         "outcome": null,
         "has_outcome": has_outcome,
-        "opportunity": opportunity
+        "opportunity": opportunity,
+        "session_id": row.session_id,
+        "session": null
+    })
+}
+
+fn to_json_with_has_outcome_and_session(
+    row: neogenealogy_storage::models::ResearchTaskRow,
+    has_outcome: bool,
+    opportunity: Option<serde_json::Value>,
+    session: Option<serde_json::Value>,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": row.id,
+        "tree_id": row.tree_id,
+        "opportunity_id": row.opportunity_id,
+        "person_id": row.person_id,
+        "title": row.title,
+        "description": row.description,
+        "status": row.status,
+        "created_at": row.created_at,
+        "updated_at": row.updated_at,
+        "started_at": row.started_at,
+        "completed_at": row.completed_at,
+        "resolution": row.resolution,
+        "outcome": null,
+        "has_outcome": has_outcome,
+        "opportunity": opportunity,
+        "session_id": row.session_id,
+        "session": session
     })
 }
 
@@ -120,6 +150,17 @@ async fn to_json_with_outcome(
                 "updated_at": o.updated_at
             })
         });
+    let session = if let Some(sid) = row.session_id {
+        state
+            .storage
+            .get_research_session(sid)
+            .await
+            .ok()
+            .flatten()
+            .map(|s| serde_json::json!({"id": s.id, "title": s.title, "status": s.status}))
+    } else {
+        None
+    };
     serde_json::json!({
         "id": row.id,
         "tree_id": row.tree_id,
@@ -133,7 +174,9 @@ async fn to_json_with_outcome(
         "started_at": row.started_at,
         "completed_at": row.completed_at,
         "resolution": row.resolution,
-        "outcome": outcome
+        "outcome": outcome,
+        "session_id": row.session_id,
+        "session": session
     })
 }
 
@@ -175,9 +218,14 @@ pub async fn list_tasks(
             offset,
         )
         .await?;
-    // Batch fetch has_outcome and opportunity info to avoid N+1
+    // Batch fetch has_outcome, opportunity and session info to avoid N+1
     let task_ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
     let has_map = state.storage.get_tasks_has_outcome_map(&task_ids).await?;
+    let session_map = state
+        .storage
+        .get_tasks_session_map(&task_ids)
+        .await
+        .unwrap_or_default();
     let opp_ids: Vec<i64> = rows.iter().filter_map(|r| r.opportunity_id).collect();
     let mut opp_map: std::collections::HashMap<i64, serde_json::Value> =
         std::collections::HashMap::new();
@@ -212,7 +260,10 @@ pub async fn list_tasks(
             let opp = row
                 .opportunity_id
                 .and_then(|oid| opp_map.get(&oid).cloned());
-            to_json_with_has_outcome(row, has, opp)
+            let sess = session_map
+                .get(&row.id)
+                .map(|s| serde_json::json!({"id": s.id, "title": s.title, "status": s.status}));
+            to_json_with_has_outcome_and_session(row, has, opp, sess)
         })
         .collect();
     Ok(Json(Paginated {

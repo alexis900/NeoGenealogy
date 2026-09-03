@@ -159,6 +159,38 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research/plan",
             get(handlers::planning::get_research_plan),
         )
+        .route(
+            "/trees/:tree_id/research-sessions",
+            get(handlers::research_sessions::list_sessions)
+                .post(handlers::research_sessions::create_session),
+        )
+        .route(
+            "/trees/:tree_id/research-sessions/:session_id",
+            get(handlers::research_sessions::get_session)
+                .patch(handlers::research_sessions::update_session)
+                .delete(handlers::research_sessions::delete_session),
+        )
+        .route(
+            "/trees/:tree_id/research-sessions/:session_id/tasks",
+            get(handlers::research_sessions::list_session_tasks),
+        )
+        .route(
+            "/trees/:tree_id/research-tasks/:task_id/session",
+            post(handlers::research_sessions::assign_task_to_session)
+                .delete(handlers::research_sessions::remove_task_from_session),
+        )
+        // Generic session routes for spec compatibility (tree_id in body or path-less)
+        .route(
+            "/research-sessions",
+            get(handlers::research_sessions::list_sessions_generic)
+                .post(handlers::research_sessions::create_session_generic),
+        )
+        .route(
+            "/research-sessions/:session_id",
+            get(handlers::research_sessions::get_session_generic)
+                .patch(handlers::research_sessions::patch_session_generic)
+                .delete(handlers::research_sessions::delete_session_generic),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 

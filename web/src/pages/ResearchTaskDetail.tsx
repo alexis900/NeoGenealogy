@@ -43,6 +43,9 @@ export default function ResearchTaskDetail(){
   const [caseSummary,setCaseSummary]=useState<any>(null);
   const [caseSummaryLoading,setCaseSummaryLoading]=useState(true);
   const [caseSummaryError,setCaseSummaryError]=useState<string|null>(null);
+  const [sessions,setSessions]=useState<any[]>([]);
+  const [selectedSession,setSelectedSession]=useState<string>("");
+  const [sessionSaving,setSessionSaving]=useState(false);
 
   const load=async()=>{
     setLoading(true); setErr(null);
@@ -72,6 +75,10 @@ export default function ResearchTaskDetail(){
       try{
         const srcs=await api.getSources(tid,{limit:100});
         setSources(srcs.items);
+      }catch{}
+      try{
+        const sess=await api.getSessions(tid,{limit:50});
+        setSessions(sess.items);
       }catch{}
       // Load case summary (derived view, never blocks main task)
       try{
@@ -109,6 +116,36 @@ export default function ResearchTaskDetail(){
   const remove=async()=>{
     if(!confirm("Delete this research task?")) return;
     try{ await api.deleteTask(tid,id); window.location.href=`/trees/${tid}/research/tasks`; }catch(e:any){setErr(e.message)}
+  };
+  const attachToSession=async()=>{
+    if(!selectedSession) return;
+    setSessionSaving(true);
+    try{
+      await api.assignTaskToSession(tid,id,Number(selectedSession));
+      const t=await api.getTask(tid,id);
+      setTask(t);
+    }catch(e:any){setErr(e.message)} finally{setSessionSaving(false)}
+  };
+  const detachFromSession=async()=>{
+    setSessionSaving(true);
+    try{
+      await api.removeTaskFromSession(tid,id);
+      const t=await api.getTask(tid,id);
+      setTask(t);
+    }catch(e:any){setErr(e.message)} finally{setSessionSaving(false)}
+  };
+  const createNewSessionFromTask=async()=>{
+    const title=window.prompt("Session title", `Research session for ${task.title}`);
+    if(!title) return;
+    setSessionSaving(true);
+    try{
+      const sess:any=await api.createSession(tid,{title, person_id: task.person_id||undefined, opportunity_id: task.opportunity_id||undefined});
+      const sid=sess.session?.id || sess.id;
+      if(sid) await api.assignTaskToSession(tid,id,sid);
+      const t=await api.getTask(tid,id);
+      setTask(t);
+      const s=await api.getSessions(tid,{limit:50}); setSessions(s.items);
+    }catch(e:any){setErr(e.message)} finally{setSessionSaving(false)}
   };
   const recordOutcome=async()=>{
     setOutcomeSaving(true);
@@ -225,6 +262,31 @@ export default function ResearchTaskDetail(){
         <button onClick={()=>quickStatus("INCONCLUSIVE")} className="px-3 py-1 bg-yellow-600 text-white rounded">Mark Inconclusive</button>
       </>}
       {(task.status==="RESOLVED"||task.status==="REJECTED"||task.status==="INCONCLUSIVE") && <span className="text-sm text-gray-600">Completed — you can edit outcome below</span>}
+    </div>
+    {/* Research Session */}
+    <div className="border rounded p-4 bg-white">
+      <h3 className="font-semibold">Research Session</h3>
+      {task.session ? (
+        <div className="mt-2 space-y-2">
+          <div className="text-sm">{task.session.title} <span className={`ml-2 px-2 py-0.5 rounded text-xs ${task.session.status==="ACTIVE"?"bg-emerald-600 text-white": task.session.status==="PLANNED"?"bg-blue-600 text-white":"bg-gray-600 text-white"}`}>{task.session.status}</span></div>
+          <div className="flex gap-2">
+            <Link to={`/trees/${tid}/research/sessions/${task.session.id}`} className="px-3 py-1 bg-purple-600 text-white rounded text-sm">View Session</Link>
+            <button onClick={detachFromSession} disabled={sessionSaving} className="px-3 py-1 border rounded text-sm disabled:opacity-50">Remove from Session</button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 space-y-2">
+          <div className="text-sm text-gray-600">Not assigned</div>
+          <div className="flex gap-2 flex-wrap items-end">
+            <select value={selectedSession} onChange={e=>setSelectedSession(e.target.value)} className="border rounded px-2 py-1 text-sm">
+              <option value="">Select session</option>
+              {sessions.map((s:any)=><option key={s.id} value={s.id}>{s.title} ({s.status})</option>)}
+            </select>
+            <button onClick={attachToSession} disabled={!selectedSession || sessionSaving} className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50">Add to Session</button>
+            <button onClick={createNewSessionFromTask} disabled={sessionSaving} className="px-3 py-1 border rounded text-sm">Create new session</button>
+          </div>
+        </div>
+      )}
     </div>
     <div className="grid gap-4 border rounded p-4 bg-white">
       <div className="text-xs font-semibold text-gray-500">Research Task — What you decided to investigate</div>

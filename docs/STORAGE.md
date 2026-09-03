@@ -46,9 +46,10 @@ Tablas principales (con `tree_id` como límite de aislamiento):
 - `research_opportunities(id, tree_id, analysis_run_id, person_id, priority, score, confidence, researchability, why, what JSON, potential_sources JSON, breakdown JSON, missing_information JSON, reasons JSON)`
 - `branch_analyses(id, tree_id, analysis_run_id, name, score, opportunity_count, high_priority_count, deepest_generation, source_coverage)`
 - `source_coverages(id, tree_id, analysis_run_id, birth, marriage, death, other_events, overall)`
-- `research_tasks(id, tree_id, opportunity_id FK SET NULL, person_id FK SET NULL, title, description, status CHECK, created_at, updated_at, started_at, completed_at, resolution, UNIQUE(active opportunity))`
-- `research_outcomes(id, tree_id FK CASCADE, task_id UNIQUE FK CASCADE, type CHECK(CONFIRMED…), summary, details, created_at, updated_at)` — ver `docs/RESEARCH_OUTCOMES.md`
-- `research_sources(id, tree_id FK CASCADE, title, author, publication, date, type CHECK(BOOK…OTHER), created_at, updated_at)` — ver `docs/EVIDENCE_SOURCES.md` (tabla `sources` GEDCOM permanece en `gedcom_sources`)
+ - `research_tasks(id, tree_id, opportunity_id FK SET NULL, person_id FK SET NULL, title, description, status CHECK, created_at, updated_at, started_at, completed_at, resolution, session_id FK SET NULL, UNIQUE(active opportunity))`
+ - `research_sessions(id, tree_id FK CASCADE, title, description, status CHECK(PLANNED/ACTIVE/COMPLETED/ABANDONED), person_id FK SET NULL, opportunity_id FK SET NULL, created_at, updated_at, started_at, completed_at)` — ver `docs/RESEARCH_SESSIONS.md`
+ - `research_outcomes(id, tree_id FK CASCADE, task_id UNIQUE FK CASCADE, type CHECK(CONFIRMED…), summary, details, created_at, updated_at)` — ver `docs/RESEARCH_OUTCOMES.md`
+ - `research_sources(id, tree_id FK CASCADE, title, author, publication, date, type CHECK(BOOK…OTHER), created_at, updated_at)` — ver `docs/EVIDENCE_SOURCES.md` (tabla `sources` GEDCOM permanece en `gedcom_sources`)
 - `research_citations(id, source_id FK CASCADE, locator, text, created_at, updated_at)`
 - `evidence(id, tree_id FK CASCADE, source_id FK CASCADE, citation_id FK SET NULL, statement, notes, created_at, updated_at)`
 - `outcome_evidence(outcome_id FK CASCADE, evidence_id FK CASCADE, relationship CHECK(SUPPORTS|CONTRADICTS), PK(outcome_id,evidence_id))`
@@ -76,7 +77,8 @@ findings(tree_id) findings(person_id) findings(severity)
 research_opportunities(tree_id) (score) (priority)
 branch_analyses(tree_id, analysis_run_id)
 source_coverages(tree_id, analysis_run_id)
-research_tasks(tree_id) (tree_id,status) (person_id) (opportunity_id) unique_active(opportunity_id,status) WHERE status IN ('OPEN','IN_PROGRESS')
+research_tasks(tree_id) (tree_id,status) (person_id) (opportunity_id) (session_id) unique_active(opportunity_id,status) WHERE status IN ('OPEN','IN_PROGRESS')
+research_sessions(tree_id) (tree_id,status) (person_id) (opportunity_id) (updated_at)
 research_outcomes(tree_id) (task_id UNIQUE) (type) (created_at)
 research_sources(tree_id) (type)
 research_citations(source_id)
@@ -120,6 +122,7 @@ get_tree, list_trees, get_person, list_persons(limit/offset), get_family, list_f
 get_findings, get_research_opportunities, get_top_research_opportunities(limit, priority>=High),
 get_branches, get_source_coverage, get_analysis_runs, count(tree_id),
 create_research_task, get_research_task, list_research_tasks, update_research_task, delete_research_task,
+create_research_session, get_research_session, list_research_sessions, update_research_session, delete_research_session, assign_task_to_session, remove_task_from_session, list_tasks_for_session, get_session_summary, get_session_detail, get_tasks_session_map, get_active_sessions_by_opportunity (sessions, batch sin N+1),
 create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome,
 create_research_source, get_research_source, list_research_sources, update_research_source, delete_research_source,
 create_research_citation, get_research_citation, list_research_citations, update_research_citation, delete_research_citation,

@@ -12,6 +12,7 @@ pub mod opportunities;
 pub mod persons;
 pub mod planning;
 pub mod research_outcomes;
+pub mod research_sessions;
 pub mod research_summary;
 pub mod research_tasks;
 pub mod runs;

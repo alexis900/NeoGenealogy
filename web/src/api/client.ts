@@ -186,4 +186,22 @@ export const api = {
   },
   // Case Summary
   getCaseSummary: (treeId:number, taskId:number)=> req<import("./types").ResearchCaseSummary>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/case-summary`),
+  // Research Sessions
+  getSessions: (treeId:number, params?:{status?:string;person_id?:number;opportunity_id?:number;limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.status) q.set("status",params.status);
+    if(params?.person_id!==undefined) q.set("person_id",String(params.person_id));
+    if(params?.opportunity_id!==undefined) q.set("opportunity_id",String(params.opportunity_id));
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchSession>>(`/api/v1/trees/${treeId}/research-sessions${s}`);
+  },
+  getSession: (treeId:number, sessionId:number)=> req<import("./types").ResearchSessionDetail>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}`),
+  createSession: (treeId:number, body:{title:string;description?:string;person_id?:number;opportunity_id?:number})=> req<import("./types").ResearchSessionDetail>(`/api/v1/trees/${treeId}/research-sessions`,{method:"POST", body:JSON.stringify(body)}),
+  updateSession: (treeId:number, sessionId:number, body:{title?:string;description?:string;status?:string;person_id?:number;opportunity_id?:number})=> req<import("./types").ResearchSessionDetail>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}`,{method:"PATCH", body:JSON.stringify(body)}),
+  deleteSession: (treeId:number, sessionId:number)=> req<void>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}`,{method:"DELETE"}),
+  getSessionTasks: (treeId:number, sessionId:number)=> req<import("./types").Paginated<import("./types").ResearchTask>>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}/tasks`),
+  assignTaskToSession: (treeId:number, taskId:number, sessionId:number)=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/session`,{method:"POST", body:JSON.stringify({session_id: sessionId})}),
+  removeTaskFromSession: (treeId:number, taskId:number)=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/session`,{method:"DELETE"}),
 };

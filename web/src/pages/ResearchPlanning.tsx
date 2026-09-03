@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { Link, useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { api } from "../api/client";
 import type { ResearchPlan, ResearchPlanItem } from "../api/types";
 import { PriorityBadge, ScoreBadge, ResearchabilityBadge } from "../components/Badges";
 
@@ -55,20 +55,54 @@ function ResearchPlanSummaryBlock({ summary }: { summary: ResearchPlan["summary"
   );
 }
 
+function CreateSessionDialog({ item, treeId, onClose, onCreated }: { item: ResearchPlanItem; treeId: number; onClose: () => void; onCreated: (session:any)=>void; }){
+  const [title,setTitle]=useState(item.title);
+  const [description,setDescription]=useState("");
+  const [creating,setCreating]=useState(false);
+  const [err,setErr]=useState<string|null>(null);
+  const create=async()=>{
+    if(!title.trim()){ setErr("Title required"); return; }
+    setCreating(true); setErr(null);
+    try{
+      const r=await api.createSession(treeId,{title: title.trim(), description: description.trim()||undefined, person_id: item.person_id, opportunity_id: item.opportunity_id});
+      onCreated(r);
+      onClose();
+    }catch(e:any){ setErr(e.message)} finally{setCreating(false)}
+  };
+  return <div className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true" aria-label="Start Research">
+    <div className="bg-white rounded p-6 w-full max-w-lg space-y-4">
+      <h2 className="text-lg font-semibold">Start Research</h2>
+      <div>
+        <label className="text-sm block">Title</label>
+        <input value={title} onChange={e=>setTitle(e.target.value)} className="border rounded w-full px-2 py-1" />
+      </div>
+      <div>
+        <label className="text-sm block">Description</label>
+        <textarea value={description} onChange={e=>setDescription(e.target.value)} className="border rounded w-full px-2 py-1" rows={3} />
+      </div>
+      <div className="text-xs text-gray-600">
+        <div>Person: {item.person_id}</div>
+        <div>Opportunity: {item.title}</div>
+      </div>
+      {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
+      <div className="flex gap-2 justify-end">
+        <button onClick={onClose} className="px-3 py-1 border rounded text-sm">Cancel</button>
+        <button onClick={create} disabled={creating} className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50">{creating?"Creating…":"Create Session"}</button>
+      </div>
+    </div>
+  </div>
+}
+
 function ResearchPlanCard({
   item,
   treeId,
   onStartResearch,
-  startingId,
-  startError,
-  errorOppId,
+  activeSession,
 }: {
   item: ResearchPlanItem;
   treeId: number;
-  onStartResearch: (oppId: number, personId: number) => void;
-  startingId: number | null;
-  startError: string | null;
-  errorOppId: number | null;
+  onStartResearch: (item: ResearchPlanItem) => void;
+  activeSession?: any;
 }) {
   const [expanded, setExpanded] = useState(false);
   const isActive = item.active_task;
@@ -76,30 +110,24 @@ function ResearchPlanCard({
   const showActiveLabel = isActive;
   const showInconclusiveLabel = !isActive && isInconclusive;
   const confidencePct = Math.round(item.confidence * 100);
-
-  // Determine CTA: with task or inconclusive -> View Research Task, else Start Research
   const hasTask = isActive || isInconclusive;
 
   return (
     <div className="border rounded p-4 bg-white shadow-sm flex flex-col">
-      {/* Priority - top */}
       <div className="flex justify-between items-start gap-2">
         <PriorityBadge p={item.priority.toLowerCase()} />
-        {showActiveLabel && (
+        {activeSession && <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded font-medium">Active Session</span>}
+        {!activeSession && showActiveLabel && (
           <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-medium">Already being researched</span>
         )}
-        {showInconclusiveLabel && (
+        {!activeSession && showInconclusiveLabel && (
           <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-medium">Previously investigated · Inconclusive</span>
         )}
       </div>
-
-      {/* Title / Person */}
       <div className="mt-3">
         <div className="text-xs text-gray-500">Person {item.person_id} · Opportunity {item.opportunity_id}</div>
         <div className="font-semibold text-base mt-1">{item.title}</div>
       </div>
-
-      {/* Score hierarchy: Research Score primary, Priority already, Planning secondary */}
       <div className="mt-3 space-y-2">
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-600 uppercase tracking-wide">Research Score</span>
@@ -112,8 +140,6 @@ function ResearchPlanCard({
           </span>
         </div>
       </div>
-
-      {/* Researchability / Confidence */}
       <div className="flex gap-2 mt-3 items-center flex-wrap text-xs">
         <span className="flex items-center gap-1">
           <ResearchabilityBadge r={item.researchability.toLowerCase()} />
@@ -121,8 +147,6 @@ function ResearchPlanCard({
         </span>
         <span className="text-gray-600">Confidence {confidencePct}%</span>
       </div>
-
-      {/* Why is this here? */}
       {item.reasons && item.reasons.length > 0 && (
         <div className="mt-3">
           <button
@@ -147,8 +171,6 @@ function ResearchPlanCard({
           )}
         </div>
       )}
-
-      {/* Actions - max 2 */}
       <div className="flex gap-2 mt-4">
         <Link
           to={`/trees/${treeId}/research/opportunities/${item.opportunity_id}`}
@@ -156,7 +178,14 @@ function ResearchPlanCard({
         >
           View Opportunity
         </Link>
-        {hasTask ? (
+        {activeSession ? (
+          <Link
+            to={`/trees/${treeId}/research/sessions/${activeSession.id}`}
+            className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          >
+            View Session
+          </Link>
+        ) : hasTask ? (
           <Link
             to={`/trees/${treeId}/research/tasks?opportunity_id=${item.opportunity_id}`}
             className="px-3 py-1 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -165,20 +194,14 @@ function ResearchPlanCard({
           </Link>
         ) : (
           <button
-            onClick={() => onStartResearch(item.opportunity_id, item.person_id)}
-            disabled={startingId === item.opportunity_id}
+            onClick={() => onStartResearch(item)}
             aria-label={`Start Research for opportunity ${item.opportunity_id}`}
-            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {startingId === item.opportunity_id ? "Starting research…" : "Start Research"}
+            Start Research
           </button>
         )}
       </div>
-      {errorOppId === item.opportunity_id && startError && (
-        <p className="text-xs text-red-600 mt-2" role="alert">
-          {startError}
-        </p>
-      )}
     </div>
   );
 }
@@ -227,29 +250,22 @@ function DeferredList({ items, treeId }: { items: ResearchPlanItem[]; treeId: nu
 export default function ResearchPlanning() {
   const { treeId } = useParams();
   const id = Number(treeId);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // Initialize from URL (normalize to lower for priority/researchability)
   const initialPriority = (searchParams.get("priority") || "").toLowerCase();
   const initialResearchability = (searchParams.get("researchability") || "").toLowerCase();
   const initialMinScore = searchParams.get("min_score") || "";
   const initialLimit = searchParams.get("limit") || "10";
-
   const [data, setData] = useState<ResearchPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-
   const [priority, setPriority] = useState(initialPriority);
   const [researchability, setResearchability] = useState(initialResearchability);
   const [minScore, setMinScore] = useState(initialMinScore);
   const [limit, setLimit] = useState(initialLimit);
-
-  const [startingId, setStartingId] = useState<number | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
-  const [errorOppId, setErrorOppId] = useState<number | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-
-  // Sync URL when filters change (skip initial mount duplication but keep simple)
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [dialogItem, setDialogItem] = useState<ResearchPlanItem | null>(null);
   const syncUrl = useCallback(
     (p: string, r: string, ms: string, l: string) => {
       const sp = new URLSearchParams();
@@ -258,14 +274,12 @@ export default function ResearchPlanning() {
       if (ms) sp.set("min_score", ms);
       if (l && l !== "10") sp.set("limit", l);
       else if (l) sp.set("limit", l);
-      // Only set if different to avoid loop
       if (sp.toString() !== searchParams.toString()) {
         setSearchParams(sp, { replace: true });
       }
     },
     [searchParams, setSearchParams]
   );
-
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
@@ -277,6 +291,10 @@ export default function ResearchPlanning() {
         researchability: researchability || undefined,
       });
       setData(r as ResearchPlan);
+      try{
+        const sess = await api.getSessions(id,{limit:100});
+        setSessions(sess.items);
+      }catch{}
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
@@ -284,44 +302,24 @@ export default function ResearchPlanning() {
       setLoading(false);
     }
   }, [id, priority, researchability, minScore, limit]);
-
   useEffect(() => {
     load();
   }, [load]);
-
-  // Keep URL in sync with filter state (debounced via effect)
   useEffect(() => {
     syncUrl(priority, researchability, minScore, limit);
   }, [priority, researchability, minScore, limit, syncUrl]);
-
-  const startResearch = async (oppId: number, personId: number) => {
-    setStartingId(oppId);
-    setStartError(null);
-    setErrorOppId(null);
-    setSuccessMsg(null);
-    try {
-      await api.createTaskFromOpportunity(id, oppId, {
-        title: `Research opportunity ${oppId} - person ${personId}`,
-      });
-      setSuccessMsg("Research task created.");
-      // refresh planning to show active_task
-      await load();
-    } catch (e: unknown) {
-      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : String(e);
-      // Handle duplicate task case gracefully - refresh and show message
-      if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("duplicate") || msg.toLowerCase().includes("exists")) {
-        setStartError("Research task already exists.");
-        setErrorOppId(oppId);
-        await load();
-      } else {
-        setStartError("Unable to start research.");
-        setErrorOppId(oppId);
-        setErr(msg);
-      }
-    } finally {
-      setStartingId(null);
-    }
+  const handleStartResearch=(item:ResearchPlanItem)=>{
+    setDialogItem(item);
   };
+  const handleSessionCreated=(sess:any)=>{
+    setSuccessMsg("Research session created.");
+    setSessions(prev=>[...prev, sess.session||sess]);
+    // optionally navigate to session
+    if(sess.session) navigate(`/trees/${id}/research/sessions/${sess.session.id}`);
+    else if(sess.id) navigate(`/trees/${id}/research/sessions/${sess.id}`);
+  };
+  const activeMap: Record<number, any> = {};
+  sessions.forEach((s:any)=>{ if(s.status==="ACTIVE" && s.opportunity_id) activeMap[s.opportunity_id]=s; });
 
   if (loading) return <PlanningSkeleton />;
   if (err && !data) {
@@ -335,24 +333,15 @@ export default function ResearchPlanning() {
       </div>
     );
   }
-
   const summary = data?.summary;
   const recommended: ResearchPlanItem[] = data?.recommended || [];
   const deferred: ResearchPlanItem[] = data?.deferred || [];
   const totalCandidates = data?.total_candidates ?? summary?.total_candidates ?? 0;
-
-  // Determine empty states
   const hasFilters = Boolean(priority || researchability || minScore);
   const isEmptyTree = totalCandidates === 0 && !hasFilters && recommended.length === 0 && deferred.length === 0;
   const isFilteredEmpty = recommended.length === 0 && deferred.length === 0 && totalCandidates === 0 && hasFilters;
-
-  // Actually if api filters with min_score, it returns total_candidates filtered. So isFilteredEmpty when filtered but no results
-  // Also case: recommended empty but deferred non-empty not empty.
-  // Use totalCandidates==0 + hasFilters to decide filtered empty.
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Research Planning</h1>
         <p className="text-lg font-medium text-gray-700 mt-1">What should I research next?</p>
@@ -371,17 +360,12 @@ export default function ResearchPlanning() {
           </div>
         )}
       </div>
-
       {summary && <ResearchPlanSummaryBlock summary={summary} />}
-
-      {/* Success toast */}
       {successMsg && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2 rounded text-sm" role="status">
           {successMsg}
         </div>
       )}
-
-      {/* Filters */}
       <div className="flex gap-3 flex-wrap items-end bg-gray-50 border rounded p-3">
         <div>
           <label htmlFor="filter-priority" className="text-xs text-gray-600 block">
@@ -459,8 +443,6 @@ export default function ResearchPlanning() {
           </select>
         </div>
       </div>
-
-      {/* Empty states */}
       {isEmptyTree && (
         <div className="p-8 text-center border rounded bg-white">
           <p className="font-medium">No research opportunities to plan.</p>
@@ -474,15 +456,12 @@ export default function ResearchPlanning() {
           <p className="text-sm text-gray-600 mt-1">Try broadening your filters.</p>
         </div>
       )}
-
-      {/* Recommended section */}
       {!isEmptyTree && !isFilteredEmpty && (
         <div className="space-y-4">
           <div>
             <h2 className="text-lg font-semibold">Recommended</h2>
             <p className="text-xs text-gray-600 mt-1">Research Score = importance/interest · Planning Score = practical priority</p>
           </div>
-
           {recommended.length === 0 ? (
             <div className="p-8 text-center text-gray-500 border rounded bg-white">No recommended investigations. Try adjusting filters.</div>
           ) : (
@@ -492,24 +471,19 @@ export default function ResearchPlanning() {
                   key={item.opportunity_id}
                   item={item}
                   treeId={id}
-                  onStartResearch={startResearch}
-                  startingId={startingId}
-                  startError={startError}
-                  errorOppId={errorOppId}
+                  onStartResearch={handleStartResearch}
+                  activeSession={activeMap[item.opportunity_id]}
                 />
               ))}
             </div>
           )}
-
-          {/* Deferred */}
           {deferred.length > 0 && <DeferredList items={deferred} treeId={id} />}
           {deferred.length === 0 && recommended.length > 0 && (
             <div className="text-sm text-gray-500">{deferred.length} deferred · {summary?.deferred_count ?? 0} deferred candidates</div>
           )}
         </div>
       )}
-
-      {/* If we have data but deferred empty, still show deferred header with count? Handled above */}
+      {dialogItem && <CreateSessionDialog item={dialogItem} treeId={id} onClose={()=>setDialogItem(null)} onCreated={handleSessionCreated} />}
     </div>
   );
 }

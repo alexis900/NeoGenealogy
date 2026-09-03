@@ -1,6 +1,6 @@
-# NeoGenealogy v0.5.1 — Research Planning UI
+# NeoGenealogy v0.5.2 — Research Sessions
 
-Herramienta local de análisis genealógico. Release v0.5.1 añade **Research Planning UI**: experiencia `What should I research next?` que reutiliza el backend 5.0 (planning_score determinista) con `Research Score` primario + `Planning Score` secundario, `Why is this here?` explicable, `Recommended/Deferred`, filtros server-side + URL state, `Start Research` → `View Research Task`, sin nueva lógica de negocio. 5.0 aportó el core `Opportunity → Planning (planning_score) → User decides → Task` sin persistencia ni IA.
+Herramienta local de análisis genealógico. Release v0.5.2 añade **Research Sessions**: contenedor de contexto `PLANNED/ACTIVE/COMPLETED/ABANDONED` que convierte `Opportunity → Planning → Session → Task(s) → Outcome`; `Start Research` crea Session (modal) en vez de Task directa, Planning muestra `Active Session` + `View Session`, Task puede asociarse a Session, Overview muestra `Active/Planned` + `Current Session`. 5.1 aportó Planning UI `What should I research next?`, 5.0 el motor determinista.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
@@ -54,10 +54,10 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
-- `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Case Summary` (derivado, case_summary.rs) + `Research Planning` (derivado, planning.rs, sin persistencia)
-- `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Case Summary, Planning, OpenAPI)
-- `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
-- `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Planning + Sources/Evidence + Outcome + Follow-ups/Actions + Case Summary integration)
+ - `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Sessions` (006, persistente, `PLANNED/ACTIVE/COMPLETED/ABANDONED`, `research_tasks.session_id`) + `Research Case Summary` (derivado) + `Research Planning` (derivado, sin persistencia)
+ - `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Sessions, Case Summary, Planning, OpenAPI)
+ - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
+ - `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Planning + Sessions + Tasks + Outcome + Evidence + Case Summary)
 
 Véase `docs/RESEARCH_PLANNING.md`, `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
@@ -74,8 +74,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace: **What should I research next?** preview + Opportunities/Active Tasks/Recent Outcomes), `/trees/:treeId/research/planning` (Planning UI: header `What should I research next?` + Summary 6 métricas + Recommended 2-col + Why is this here? + Deferred colapsado + filtros Priority/Researchability/Min Planning Score/Limit server-side + URL state + Start Research), `/trees/:treeId/research/tasks` (Tasks), `/trees/:treeId/research/tasks/:taskId` (Outcome+Assessment+Gaps+Follow-ups+Actions+Evidence + **Case Summary** con Warnings/Timeline/Closure), `/trees/:treeId/research/history` (filtros assessment/gap + View Case Summary), `/trees/:treeId/sources` (Research Sources), `/trees/:treeId/evidence` (Evidence).
-Workflow: `Opportunity → Planning → Task OPEN → RESOLVED → Outcome CONFIRMED + Evidence SUPPORTS → Assessment → Gaps → Follow-ups → Action [Start follow-up → OPEN/COMPLETED/SKIPPED] → Case Summary` — ver `docs/RESEARCH_PLANNING.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace: **Sessions Active/Planned + Current Session** + Planning preview + Opportunities/Active Tasks/Recent Outcomes), `/trees/:treeId/research/planning` (Planning → **Start Research** abre **Create Session** modal + muestra `Active Session`/`View Session`), `/trees/:treeId/research/sessions` (Sessions list), `/trees/:treeId/research/sessions/:sessionId` (Session Detail: Objective/Person/Opportunity/Tasks + Progress + Complete/Abandon/Reopen), `/trees/:treeId/research/tasks` (Tasks con `session`), `/trees/:treeId/research/tasks/:taskId` (Task Detail con bloque **Research Session** Add/Remove/View), `/trees/:treeId/research/history` (History), `/trees/:treeId/sources` (Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Planning → Session (PLANNED→ACTIVE→COMPLETED) → Task(s) → Outcome → Evidence → Assessment → Gaps → Follow-ups → Case Summary` — ver `docs/RESEARCH_SESSIONS.md`.
 
 ## API REST
 

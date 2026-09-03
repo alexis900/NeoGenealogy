@@ -18,6 +18,8 @@ import SourceDetail from "./pages/SourceDetail";
 import Evidence from "./pages/Evidence";
 import EvidenceDetail from "./pages/EvidenceDetail";
 import ResearchPlanning from "./pages/ResearchPlanning";
+import ResearchSessions from "./pages/ResearchSessions";
+import ResearchSessionDetail from "./pages/ResearchSessionDetail";
 
 export default function App(){
   return <BrowserRouter>
@@ -29,6 +31,8 @@ export default function App(){
         <Route path="/trees/:treeId/research" element={<ResearchWorkspace/>} />
         <Route path="/trees/:treeId/research/planning" element={<ResearchPlanning/>} />
         <Route path="/trees/:treeId/research/opportunities" element={<ResearchQueue/>} />
+        <Route path="/trees/:treeId/research/sessions" element={<ResearchSessions/>} />
+        <Route path="/trees/:treeId/research/sessions/:sessionId" element={<ResearchSessionDetail/>} />
         <Route path="/trees/:treeId/research/tasks" element={<ResearchTasks/>} />
         <Route path="/trees/:treeId/research/tasks/:taskId" element={<ResearchTaskDetail/>} />
         <Route path="/trees/:treeId/research/history" element={<ResearchHistory/>} />

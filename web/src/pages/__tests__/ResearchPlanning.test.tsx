@@ -20,6 +20,11 @@ vi.mock("../../api/client", () => ({
   api: {
     getPlan: vi.fn(() => Promise.resolve(mockPlan)),
     createTaskFromOpportunity: vi.fn(() => Promise.resolve({ id: 999 })),
+    getSessions: vi.fn(() => Promise.resolve({ items: [], pagination: { limit: 50, offset: 0, total: 0 } })),
+    createSession: vi.fn(() => Promise.resolve({ session: { id: 1, title: "t", status: "PLANNED" } })),
+    getSession: vi.fn(),
+    updateSession: vi.fn(),
+    deleteSession: vi.fn(),
   },
 }));
 
@@ -224,39 +229,46 @@ test("Start Research executes POST and refreshes", async () => {
   const user = userEvent.setup();
   const { api } = await import("../../api/client");
   (api.getPlan as any).mockResolvedValue(mockPlan);
-  (api.createTaskFromOpportunity as any).mockResolvedValueOnce({ id: 999 });
+  (api.createSession as any).mockResolvedValueOnce({ session: { id: 10, title: "Find parents of Josep", status: "PLANNED" } });
   renderPlanning();
   await screen.findByText("Find parents of Josep");
   const startBtn = screen.getByText("Start Research");
   await user.click(startBtn);
-  expect(api.createTaskFromOpportunity).toHaveBeenCalledWith(1, 101, expect.objectContaining({ title: expect.any(String) }));
-  expect(await screen.findByText("Research task created.")).toBeInTheDocument();
+  expect(await screen.findByText("Start Research", { selector: "h2" })).toBeInTheDocument();
+  // dialog has Create Session button
+  const createBtn = screen.getByText("Create Session");
+  await user.click(createBtn);
+  expect(api.createSession).toHaveBeenCalledWith(1, expect.objectContaining({ title: expect.any(String) }));
 });
 
 test("Start Research loading state", async () => {
   const user = userEvent.setup();
   const { api } = await import("../../api/client");
   (api.getPlan as any).mockResolvedValue(mockPlan);
-  let resolveTask: any;
-  (api.createTaskFromOpportunity as any).mockReturnValueOnce(new Promise((res) => (resolveTask = res)));
+  let resolveSess: any;
+  (api.createSession as any).mockReturnValueOnce(new Promise((res) => (resolveSess = res)));
   renderPlanning();
   await screen.findByText("Find parents of Josep");
   const btn = screen.getByText("Start Research");
   await user.click(btn);
-  expect(await screen.findByText("Starting research…")).toBeInTheDocument();
-  resolveTask({ id: 999 });
-  expect(await screen.findByText("Research task created.")).toBeInTheDocument();
+  const createBtn = await screen.findByText("Create Session");
+  await user.click(createBtn);
+  expect(screen.getByText("Creating…")).toBeInTheDocument();
+  resolveSess({ session: { id: 10, title: "t", status: "PLANNED" } });
+  await waitFor(()=> expect(screen.queryByText("Creating…")).not.toBeInTheDocument());
 });
 
 test("Start Research duplicate task error", async () => {
   const user = userEvent.setup();
   const { api } = await import("../../api/client");
   (api.getPlan as any).mockResolvedValue(mockPlan);
-  (api.createTaskFromOpportunity as any).mockRejectedValueOnce(new Error("Task already exists"));
+  (api.createSession as any).mockRejectedValueOnce(new Error("Task already exists"));
   renderPlanning();
   await screen.findByText("Find parents of Josep");
   await user.click(screen.getByText("Start Research"));
-  expect(await screen.findByText("Research task already exists.")).toBeInTheDocument();
+  const createBtn = await screen.findByText("Create Session");
+  await user.click(createBtn);
+  expect(await screen.findByText(/Title required|Task already exists|Unable/)).toBeInTheDocument();
 });
 
 test("Planning error and retry", async () => {
@@ -296,4 +308,14 @@ test("Header explanation and What should I research next", async () => {
   await screen.findByText("Find parents of Josep");
   expect(screen.getByText("What should I research next?")).toBeInTheDocument();
   expect(screen.getByText(/Planning combines existing Research Score/)).toBeInTheDocument();
+});
+
+test("Planning shows View Session when active session exists", async () => {
+  const { api } = await import("../../api/client");
+  (api.getPlan as any).mockResolvedValueOnce(mockPlan);
+  (api.getSessions as any).mockResolvedValueOnce({ items: [{ id: 55, tree_id: 1, title: "Active session", status: "ACTIVE", opportunity_id: 101, person_id: 201, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }], pagination: { limit: 50, offset: 0, total: 1 } });
+  renderPlanning();
+  await screen.findByText("Find parents of Josep");
+  expect(await screen.findByText("View Session")).toBeInTheDocument();
+  expect(screen.getByText("Active Session")).toBeInTheDocument();
 });

@@ -376,6 +376,7 @@ mod tests {
             started_at: Some("2024-01-02T00:00:00Z".into()),
             completed_at: Some("2024-01-05T00:00:00Z".into()),
             resolution: None,
+            session_id: None,
         };
         let outcome = crate::models::ResearchOutcomeRow {
             id: 1,

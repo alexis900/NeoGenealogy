@@ -2398,4 +2398,518 @@ impl Storage {
         }
         Ok(candidates)
     }
+
+    // --- Research Sessions ---
+    fn validate_session_status(status: &str) -> Result<(), StorageError> {
+        let allowed = ["PLANNED", "ACTIVE", "COMPLETED", "ABANDONED"];
+        if !allowed.contains(&status) {
+            return Err(StorageError::Import(format!(
+                "invalid session status {status}"
+            )));
+        }
+        Ok(())
+    }
+
+    pub async fn create_research_session(
+        &self,
+        tree_id: i64,
+        title: &str,
+        description: Option<&str>,
+        person_id: Option<i64>,
+        opportunity_id: Option<i64>,
+    ) -> Result<ResearchSessionRow, StorageError> {
+        if title.trim().is_empty() {
+            return Err(StorageError::Import("title must not be empty".into()));
+        }
+        // validate tree
+        let tree = self.get_tree(tree_id).await?;
+        if tree.is_none() {
+            return Err(StorageError::NotFound(format!("tree {tree_id} not found")));
+        }
+        if let Some(pid) = person_id {
+            let p_tree: Option<i64> = sqlx::query_scalar("SELECT tree_id FROM persons WHERE id=?1")
+                .bind(pid)
+                .fetch_optional(&self.pool)
+                .await?
+                .flatten();
+            if p_tree != Some(tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "person {pid} not in tree {tree_id}"
+                )));
+            }
+        }
+        if let Some(oid) = opportunity_id {
+            let o_tree: Option<i64> =
+                sqlx::query_scalar("SELECT tree_id FROM research_opportunities WHERE id=?1")
+                    .bind(oid)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .flatten();
+            if o_tree != Some(tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "opportunity {oid} not in tree {tree_id}"
+                )));
+            }
+        }
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_sessions (tree_id, title, description, status, person_id, opportunity_id, created_at, updated_at, started_at, completed_at) VALUES (?1,?2,?3,'PLANNED',?4,?5,?6,?7,NULL,NULL)",
+        )
+        .bind(tree_id)
+        .bind(title)
+        .bind(description)
+        .bind(person_id)
+        .bind(opportunity_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row =
+            sqlx::query_as::<_, ResearchSessionRow>("SELECT * FROM research_sessions WHERE id=?1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_session(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchSessionRow>, StorageError> {
+        let row =
+            sqlx::query_as::<_, ResearchSessionRow>("SELECT * FROM research_sessions WHERE id=?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_sessions(
+        &self,
+        tree_id: i64,
+        status: Option<&str>,
+        person_id: Option<i64>,
+        opportunity_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchSessionRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_sessions WHERE tree_id = ?".to_string();
+        let mut count_sql = "SELECT COUNT(*) FROM research_sessions WHERE tree_id = ?".to_string();
+        if status.is_some() {
+            sql.push_str(" AND status = ?");
+            count_sql.push_str(" AND status = ?");
+        }
+        if person_id.is_some() {
+            sql.push_str(" AND person_id = ?");
+            count_sql.push_str(" AND person_id = ?");
+        }
+        if opportunity_id.is_some() {
+            sql.push_str(" AND opportunity_id = ?");
+            count_sql.push_str(" AND opportunity_id = ?");
+        }
+        sql.push_str(" ORDER BY CASE status WHEN 'ACTIVE' THEN 0 WHEN 'PLANNED' THEN 1 WHEN 'COMPLETED' THEN 2 WHEN 'ABANDONED' THEN 3 ELSE 4 END, updated_at DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchSessionRow>(&sql).bind(tree_id);
+        if let Some(s) = status {
+            cq = cq.bind(s);
+            q = q.bind(s);
+        }
+        if let Some(pid) = person_id {
+            cq = cq.bind(pid);
+            q = q.bind(pid);
+        }
+        if let Some(oid) = opportunity_id {
+            cq = cq.bind(oid);
+            q = q.bind(oid);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn update_research_session(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        description: Option<Option<&str>>,
+        status: Option<&str>,
+        person_id: Option<Option<i64>>,
+        opportunity_id: Option<Option<i64>>,
+    ) -> Result<ResearchSessionRow, StorageError> {
+        let existing = self
+            .get_research_session(id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("session {id} not found")))?;
+        let new_title = title.unwrap_or(&existing.title).to_string();
+        if new_title.trim().is_empty() {
+            return Err(StorageError::Import("title must not be empty".into()));
+        }
+        let new_status = status.unwrap_or(&existing.status).to_string();
+        Self::validate_session_status(&new_status)?;
+        let new_description = match description {
+            Some(inner) => inner.map(|s| s.to_string()),
+            None => existing.description.clone(),
+        };
+        let new_person_id = match person_id {
+            Some(inner) => inner,
+            None => existing.person_id,
+        };
+        let new_opportunity_id = match opportunity_id {
+            Some(inner) => inner,
+            None => existing.opportunity_id,
+        };
+        // validate person/opportunity tree isolation if changed
+        if let Some(pid) = new_person_id {
+            let p_tree: Option<i64> = sqlx::query_scalar("SELECT tree_id FROM persons WHERE id=?1")
+                .bind(pid)
+                .fetch_optional(&self.pool)
+                .await?
+                .flatten();
+            if p_tree != Some(existing.tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "person {pid} not in tree {}",
+                    existing.tree_id
+                )));
+            }
+        }
+        if let Some(oid) = new_opportunity_id {
+            let o_tree: Option<i64> =
+                sqlx::query_scalar("SELECT tree_id FROM research_opportunities WHERE id=?1")
+                    .bind(oid)
+                    .fetch_optional(&self.pool)
+                    .await?
+                    .flatten();
+            if o_tree != Some(existing.tree_id) {
+                return Err(StorageError::NotFound(format!(
+                    "opportunity {oid} not in tree {}",
+                    existing.tree_id
+                )));
+            }
+        }
+        let now = crate::models::now_iso();
+        let mut started_at = existing.started_at.clone();
+        let mut completed_at = existing.completed_at.clone();
+        if new_status == "ACTIVE" && existing.status != "ACTIVE" {
+            started_at = Some(now.clone());
+            // when reopening, clear completed_at
+            if ["COMPLETED", "ABANDONED"].contains(&existing.status.as_str()) {
+                completed_at = None;
+            }
+        }
+        if ["COMPLETED", "ABANDONED"].contains(&new_status.as_str()) && completed_at.is_none() {
+            completed_at = Some(now.clone());
+        }
+        if new_status == "ACTIVE" && ["COMPLETED", "ABANDONED"].contains(&existing.status.as_str())
+        {
+            // reopening: clear completed_at already done, keep started_at as now?
+            // keep started_at as existing or now? spec says completed_at = NULL when reopening
+            // started_at remains
+        }
+        // if moving from ACTIVE to PLANNED etc, keep started_at? but spec only cares for ACTIVE->started_at and COMPLETED/ABANDONED -> completed_at
+        // if reopening to ACTIVE, completed_at null already
+        if new_status != "COMPLETED" && new_status != "ABANDONED" {
+            // if status is not terminal, ensure completed_at is null unless previously terminal and now active (already cleared)
+            // for PLANNED -> ACTIVE, keep completed_at null
+            // for COMPLETED -> ACTIVE we cleared
+            // for other transitions keep as is?
+            // To satisfy spec: when reopens COMPLETED/ABANDONED → ACTIVE, completed_at = NULL
+            if ["COMPLETED", "ABANDONED"].contains(&existing.status.as_str())
+                && new_status == "ACTIVE"
+            {
+                completed_at = None;
+            }
+        }
+        // If new status is PLANNED from COMPLETED/ABANDONED, should we clear completed_at? spec only mentions reopening to ACTIVE, but we treat generically: if leaving terminal to non-terminal, clear completed_at
+        if ["COMPLETED", "ABANDONED"].contains(&existing.status.as_str())
+            && !["COMPLETED", "ABANDONED"].contains(&new_status.as_str())
+        {
+            completed_at = None;
+        }
+        sqlx::query(
+            "UPDATE research_sessions SET title=?1, description=?2, status=?3, person_id=?4, opportunity_id=?5, updated_at=?6, started_at=?7, completed_at=?8 WHERE id=?9",
+        )
+        .bind(&new_title)
+        .bind(&new_description)
+        .bind(&new_status)
+        .bind(new_person_id)
+        .bind(new_opportunity_id)
+        .bind(&now)
+        .bind(&started_at)
+        .bind(&completed_at)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_research_session(id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn delete_research_session(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_sessions WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn assign_task_to_session(
+        &self,
+        task_id: i64,
+        session_id: i64,
+    ) -> Result<ResearchTaskRow, StorageError> {
+        let task = self
+            .get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        let session = self
+            .get_research_session(session_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("session {session_id} not found")))?;
+        if task.tree_id != session.tree_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} not in same tree as session {session_id}"
+            )));
+        }
+        // tree isolation already ensures same tree
+        let now = crate::models::now_iso();
+        sqlx::query("UPDATE research_tasks SET session_id=?1, updated_at=?2 WHERE id=?3")
+            .bind(session_id)
+            .bind(&now)
+            .bind(task_id)
+            .execute(&self.pool)
+            .await?;
+        let row = self.get_research_task(task_id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn remove_task_from_session(
+        &self,
+        task_id: i64,
+    ) -> Result<ResearchTaskRow, StorageError> {
+        self.get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        let now = crate::models::now_iso();
+        sqlx::query("UPDATE research_tasks SET session_id=NULL, updated_at=?1 WHERE id=?2")
+            .bind(&now)
+            .bind(task_id)
+            .execute(&self.pool)
+            .await?;
+        let row = self.get_research_task(task_id).await?.unwrap();
+        Ok(row)
+    }
+
+    pub async fn list_tasks_for_session(
+        &self,
+        session_id: i64,
+    ) -> Result<Vec<ResearchTaskRow>, StorageError> {
+        let rows = sqlx::query_as::<_, ResearchTaskRow>(
+            "SELECT * FROM research_tasks WHERE session_id=?1 ORDER BY updated_at DESC",
+        )
+        .bind(session_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn get_session_summary(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, StorageError> {
+        let session = self
+            .get_research_session(session_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("session {session_id} not found")))?;
+        let tasks = self.list_tasks_for_session(session_id).await?;
+        let total = tasks.len() as i64;
+        let open = tasks.iter().filter(|t| t.status == "OPEN").count() as i64;
+        let in_progress = tasks.iter().filter(|t| t.status == "IN_PROGRESS").count() as i64;
+        let terminal = tasks
+            .iter()
+            .filter(|t| ["RESOLVED", "REJECTED", "INCONCLUSIVE"].contains(&t.status.as_str()))
+            .count() as i64;
+        // outcomes count: count outcomes for those task ids, no N+1 single query
+        let outcomes_count = if tasks.is_empty() {
+            0
+        } else {
+            let tids: Vec<i64> = tasks.iter().map(|t| t.id).collect();
+            let placeholders = tids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            let sql = format!("SELECT COUNT(*) FROM research_outcomes WHERE task_id IN ({placeholders}) AND tree_id=?");
+            let mut q = sqlx::query_scalar::<_, i64>(&sql);
+            for tid in tids {
+                q = q.bind(tid);
+            }
+            q = q.bind(session.tree_id);
+            q.fetch_one(&self.pool).await.unwrap_or(0)
+        };
+        Ok(serde_json::json!({
+            "total_tasks": total,
+            "open_tasks": open,
+            "in_progress_tasks": in_progress,
+            "terminal_tasks": terminal,
+            "outcomes_count": outcomes_count
+        }))
+    }
+
+    pub async fn get_session_detail(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, StorageError> {
+        let session = self
+            .get_research_session(session_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("session {session_id} not found")))?;
+        // person batch single query
+        let person = if let Some(pid) = session.person_id {
+            sqlx::query_as::<_, PersonRow>("SELECT * FROM persons WHERE id=?1")
+                .bind(pid)
+                .fetch_optional(&self.pool)
+                .await?
+                .map(|p| {
+                    let name = p.display_name.clone().unwrap_or_else(|| {
+                        let gn = p.given_name.clone().unwrap_or_default();
+                        let sn = p.surname.clone().unwrap_or_default();
+                        let c = format!("{} {}", gn, sn).trim().to_string();
+                        if c.is_empty() {
+                            p.gedcom_id.clone()
+                        } else {
+                            c
+                        }
+                    });
+                    serde_json::json!({ "id": p.id, "name": name, "gedcom_id": p.gedcom_id })
+                })
+        } else {
+            None
+        };
+        let opportunity = if let Some(oid) = session.opportunity_id {
+            sqlx::query_as::<_, ResearchOpportunityRow>(
+                "SELECT * FROM research_opportunities WHERE id=?1",
+            )
+            .bind(oid)
+            .fetch_optional(&self.pool)
+            .await?
+            .map(|o| {
+                serde_json::json!({
+                    "id": o.id,
+                    "title": o.why.clone().unwrap_or_else(|| format!("Opportunity {}", o.id)),
+                    "priority": o.priority,
+                    "score": o.score,
+                    "person_id": o.person_id
+                })
+            })
+        } else {
+            None
+        };
+        let tasks = self.list_tasks_for_session(session_id).await?;
+        // Batch has_outcome and outcomes? For summary we already have method, but for detail we need tasks with has_outcome
+        let task_ids: Vec<i64> = tasks.iter().map(|t| t.id).collect();
+        let has_map = self
+            .get_tasks_has_outcome_map(&task_ids)
+            .await
+            .unwrap_or_default();
+        let tasks_json: Vec<serde_json::Value> = tasks
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "id": t.id,
+                    "tree_id": t.tree_id,
+                    "opportunity_id": t.opportunity_id,
+                    "person_id": t.person_id,
+                    "title": t.title,
+                    "description": t.description,
+                    "status": t.status,
+                    "session_id": t.session_id,
+                    "created_at": t.created_at,
+                    "updated_at": t.updated_at,
+                    "started_at": t.started_at,
+                    "completed_at": t.completed_at,
+                    "resolution": t.resolution,
+                    "has_outcome": has_map.get(&t.id).copied().unwrap_or(false)
+                })
+            })
+            .collect();
+        let summary = self.get_session_summary(session_id).await?;
+        Ok(serde_json::json!({
+            "session": {
+                "id": session.id,
+                "tree_id": session.tree_id,
+                "title": session.title,
+                "description": session.description,
+                "status": session.status,
+                "person_id": session.person_id,
+                "opportunity_id": session.opportunity_id,
+                "created_at": session.created_at,
+                "updated_at": session.updated_at,
+                "started_at": session.started_at,
+                "completed_at": session.completed_at
+            },
+            "person": person,
+            "opportunity": opportunity,
+            "tasks": tasks_json,
+            "summary": summary
+        }))
+    }
+
+    pub async fn get_tasks_session_map(
+        &self,
+        task_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, ResearchSessionRow>, StorageError> {
+        if task_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        // fetch tasks to get session_ids
+        let placeholders = task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT * FROM research_tasks WHERE id IN ({placeholders})");
+        let mut q = sqlx::query_as::<_, ResearchTaskRow>(&sql);
+        for id in task_ids {
+            q = q.bind(id);
+        }
+        let tasks = q.fetch_all(&self.pool).await?;
+        let session_ids: Vec<i64> = tasks.iter().filter_map(|t| t.session_id).collect();
+        if session_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders2 = session_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql2 = format!("SELECT * FROM research_sessions WHERE id IN ({placeholders2})");
+        let mut q2 = sqlx::query_as::<_, ResearchSessionRow>(&sql2);
+        for sid in &session_ids {
+            q2 = q2.bind(sid);
+        }
+        let sessions = q2.fetch_all(&self.pool).await?;
+        let sess_map: std::collections::HashMap<i64, ResearchSessionRow> =
+            sessions.into_iter().map(|s| (s.id, s)).collect();
+        let mut result = std::collections::HashMap::new();
+        for t in tasks {
+            if let Some(sid) = t.session_id {
+                if let Some(sess) = sess_map.get(&sid) {
+                    result.insert(t.id, sess.clone());
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub async fn get_active_sessions_by_opportunity(
+        &self,
+        tree_id: i64,
+    ) -> Result<std::collections::HashMap<i64, ResearchSessionRow>, StorageError> {
+        let rows = sqlx::query_as::<_, ResearchSessionRow>(
+            "SELECT * FROM research_sessions WHERE tree_id=?1 AND status='ACTIVE' AND opportunity_id IS NOT NULL",
+        )
+        .bind(tree_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut map = std::collections::HashMap::new();
+        for r in rows {
+            if let Some(oid) = r.opportunity_id {
+                map.insert(oid, r);
+            }
+        }
+        Ok(map)
+    }
 }
