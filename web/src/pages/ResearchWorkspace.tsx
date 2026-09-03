@@ -15,6 +15,7 @@ export default function ResearchWorkspace(){
   const [activeTasks,setActiveTasks]=useState<any[]>([]);
   const [recentOutcomes,setRecentOutcomes]=useState<any[]>([]);
   const [oppsCounts,setOppsCounts]=useState<{high:number;medium:number;low:number}|null>(null);
+  const [planPreview,setPlanPreview]=useState<any>(null);
   const [loading,setLoading]=useState(true);
   const [err,setErr]=useState<string|null>(null);
 
@@ -29,6 +30,12 @@ export default function ResearchWorkspace(){
       setActiveTasks(active);
       const outcomes=await api.getOutcomes(id,{limit:5});
       setRecentOutcomes(outcomes.items);
+      try{
+        const plan=await api.getPlan(id,{limit:3});
+        setPlanPreview(plan);
+      } catch{
+        // planning optional - overview remains stable if it fails
+      }
     }catch(e:any){setErr(e.message)} finally{setLoading(false)}
   };
   useEffect(()=>{load()},[id]);
@@ -46,6 +53,27 @@ export default function ResearchWorkspace(){
       <Link to={`/trees/${id}/research/tasks`} className="px-3 py-1 border rounded hover:bg-gray-50">Tasks</Link>
       <Link to={`/trees/${id}/research/history`} className="px-3 py-1 border rounded hover:bg-gray-50">History</Link>
     </nav>
+
+    {/* What should I research next? - Planning preview */}
+    <div className="border rounded p-4 bg-white">
+      <h2 className="font-semibold">What should I research next?</h2>
+      {planPreview && planPreview.recommended && planPreview.recommended.length>0 ? (
+        <div className="mt-2 space-y-2">
+          {planPreview.recommended.slice(0,3).map((item:any, idx:number)=>(
+            <div key={item.opportunity_id} className="flex justify-between items-center text-sm border rounded p-2">
+              <span>{idx+1}. {item.title} <span className="text-gray-500">· Person {item.person_id}</span></span>
+              <span className="font-mono text-xs bg-gray-100 border rounded px-2 py-0.5">Planning Score {item.planning_score.toFixed(1)}</span>
+            </div>
+          ))}
+          <Link to={`/trees/${id}/research/planning`} className="text-sm text-blue-600 underline inline-block mt-1">View Research Plan →</Link>
+        </div>
+      ) : (
+        <div className="mt-2">
+          <p className="text-sm text-gray-600">Planning combines Research Score, researchability and evidence gaps to suggest the most useful investigations.</p>
+          <Link to={`/trees/${id}/research/planning`} className="text-sm text-blue-600 underline inline-block mt-2">View Research Plan →</Link>
+        </div>
+      )}
+    </div>
 
     {/* Opportunities block */}
     <div className="border rounded p-4 bg-white">

@@ -1,4 +1,4 @@
-# Research Planning — Fase 5.0
+# Research Planning — Fases 5.0 / 5.1
 
 `Opportunity → Planning → User decides → Task`
 
@@ -231,6 +231,52 @@ Nueva sección `Research → Planning` (`/trees/:treeId/research/planning`):
 - Explicación: `Research Score = importancia/interés` vs `Planning Score = prioridad práctica`
 
 Navegación `Research` ahora: Overview / Planning / Opportunities / Tasks / History + Sources/Evidence/Coverage.
+
+### Fase 5.1 — Research Planning UI
+
+Objetivo: convertir el backend 5.0 en una experiencia clara **“What should I research next?”** sin nueva lógica de negocio.
+
+**Principios**: reutiliza endpoint 5.0, no recalcula Planning Score ni ranking en TS, reutiliza `ResearchPlanSummary`, `PriorityBadge`, `ResearchabilityBadge`, `ScoreBadge`, mantiene `Research Score` como métrica primaria (visual mayor) y `Planning Score` secundario (`Planning Score · 91` mono), sin persistencia ni nuevos estados.
+
+**Ruta**: `/trees/:treeId/research/planning` en nav `Research → Overview / Planning / Opportunities / Tasks / History / Sources / Evidence / Coverage`.
+
+**Header**: `Research Planning` + `What should I research next?` + `10 recommended investigations / 42 total candidates` + explicación `Planning combines existing Research Score, researchability, confidence, evidence gaps and current task state to suggest what is most useful to investigate next.` (sin fórmula).
+
+**Summary** (compacto, solo `ResearchPlanSummary`): `Recommended / Candidates / Active research / Inconclusive / High priority / Critical gaps` — 6 celdas, sin queries extra.
+
+**Recommended**: grid 2 col desktop / 1 col móvil, cards con jerarquía `Research Score → Priority → Planning Score → Researchability/Confidence`; cada card muestra `HIGH` etc reutilizando sistema previo, `Research Score 87` primario grande, `Planning Score 91` secundario, `Confidence 91%` (0.91×100), `High researchability` etc.
+
+**Why is this here?** botón colapsable `Why is this here?` → `Hide reasons` (`aria-expanded`, focus ring, teclado) que renderiza `ResearchPlanningReason[]` del backend con `✓ label – description` (no texto inventado).
+
+**Active research**: `active_task==true` → badge `Already being researched` + CTA `View Research Task` (no `Start Research`).
+
+**Inconclusive**: `task_status==INCONCLUSIVE` → `Previously investigated · Inconclusive` + razón `Previously investigated but inconclusive` + CTA `View Research Task`.
+
+**Acciones**: máx 2 → `View Opportunity | Start Research` (sin task) o `View Opportunity | View Research Task` (con task); `Start Research` usa `POST /research-opportunities/:opportunity_id/tasks`, muestra `Starting research…` disable, éxito `Research task created.` + refresh del plan (aparece `active_task`), error `Unable to start research.` / `Research task already exists.` (maneja duplicado) con retry.
+
+**Deferred**: tras Recommended, `Deferred — 32 other candidates`, colapsado por defecto (`Show deferred candidates` → `Hide`), lista compacta `Priority / Person / Title / Research Score / Planning Score` + `View Opportunity`, sin explicaciones expandibles.
+
+**Filtros**: `Priority (All/Critical/High/Medium/Low)`, `Researchability (All/High/Medium/Low)`, `Minimum Planning Score (range 0..100 + number)`, `Limit (10/20/50)` — server-side via `GET /research/plan?priority=&researchability=&min_score=&limit=`, sin filtrado frontend.
+
+**URL state**: refleja filtros `?priority=HIGH&researchability=HIGH&min_score=70&limit=10` para compartir, refresh y back/forward (usa `useSearchParams`, sin librería nueva).
+
+**Loading**: skeleton `PlanningSkeleton` (`animate-pulse` + `Loading research planning…`), no flicker `Recommended: 0` durante carga.
+
+**Empty**: `No research opportunities to plan. Your current tree has no actionable research opportunities.` si `total_candidates==0` sin filtros; `No opportunities match these filters. Try broadening your filters.` si filtros eliminan resultados (diferencia empty tree vs filtered-empty).
+
+**Error**: `Unable to load research planning. [Retry]` con mensaje del backend, no silencio.
+
+**Responsive**: Tailwind `grid-cols-1 md:grid-cols-2` para cards, `grid-cols-2 md:grid-cols-3 lg:grid-cols-6` para summary, 1–2 col tablet, 1 col móvil.
+
+**Research Overview integration**: bloque `What should I research next?` en `/research` (Overview) que carga `getPlan(limit=3)` y muestra `1. Title · Planning Score 91` + `View Research Plan`; si falla, muestra solo texto explicativo + link (estable, sin forzar API).
+
+**Opportunity Detail integration**: si la oportunidad aparece en `getPlan(limit=100)` muestra `Planning Score` + `Why is this here?` colapsable (presentación, sin recálculo; Planning sigue siendo fuente principal).
+
+**A11y**: labels claros, controles `htmlFor`, `aria-expanded`/`aria-controls`, `aria-label`, `focus:ring`, `contrast`, no solo color para `CRITICAL`.
+
+**No business logic**: frontend solo presenta `planning_score, reasons, active_task` del backend.
+
+Ver `web/src/pages/ResearchPlanning.tsx`, `web/src/pages/__tests__/ResearchPlanning.test.tsx`, `docs/WEB.md`.
 
 ## Performance y No-objetivos
 
