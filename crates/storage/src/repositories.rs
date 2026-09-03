@@ -806,16 +806,94 @@ impl Storage {
         let fa_open = fa_counts.get("OPEN").cloned().unwrap_or(0);
         let fa_completed = fa_counts.get("COMPLETED").cloned().unwrap_or(0);
         let fa_skipped = fa_counts.get("SKIPPED").cloned().unwrap_or(0);
+        // sessions counts
+        let sess_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_sessions WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+        let sess_active: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_sessions WHERE tree_id=?1 AND status='ACTIVE'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let sess_planned: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_sessions WHERE tree_id=?1 AND status='PLANNED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let sess_completed: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_sessions WHERE tree_id=?1 AND status='COMPLETED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let sess_abandoned: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_sessions WHERE tree_id=?1 AND status='ABANDONED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        // outcome distribution 5 types
+        let out_confirmed: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1 AND type='CONFIRMED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let out_false: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1 AND type='FALSE_LEAD'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let out_incon: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1 AND type='INCONCLUSIVE'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let out_newlead: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1 AND type='NEW_LEAD'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let out_noev: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_outcomes WHERE tree_id=?1 AND type='NO_EVIDENCE'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
-            "outcomes": { "total": outcomes_total },
+            "outcomes": { "total": outcomes_total, "confirmed": out_confirmed, "false_lead": out_false, "inconclusive": out_incon, "new_lead": out_newlead, "no_evidence": out_noev },
             "sources": { "total": sources_total },
             "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
             "assessment": { "no_evidence": cnt_no, "weak": cnt_weak, "mixed": cnt_mixed, "supported": cnt_supported, "strongly_supported": cnt_strong },
             "evidence_gaps": { "critical": cnt_gaps_critical, "warning": cnt_gaps_warning, "info": cnt_gaps_info },
             "research_followups": { "high": cnt_fu_high, "medium": cnt_fu_medium, "low": cnt_fu_low },
-            "followup_actions": { "open": fa_open, "completed": fa_completed, "skipped": fa_skipped }
+            "followup_actions": { "open": fa_open, "completed": fa_completed, "skipped": fa_skipped },
+            "sessions": { "total": sess_total, "active": sess_active, "planned": sess_planned, "completed": sess_completed, "abandoned": sess_abandoned },
+            "research_activity": {
+                "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive, "total": task_open + task_in_progress + task_resolved + task_rejected + task_inconclusive },
+                "outcomes": { "total": outcomes_total, "confirmed": out_confirmed, "false_lead": out_false, "inconclusive": out_incon, "new_lead": out_newlead, "no_evidence": out_noev },
+                "evidence": { "total": evidence_total, "supporting": evidence_supporting, "contradicting": evidence_contradicting },
+                "followups": { "open": fa_open, "completed": fa_completed, "skipped": fa_skipped, "total": fa_open + fa_completed + fa_skipped }
+            }
         }))
     }
 
@@ -2830,6 +2908,11 @@ impl Storage {
             })
             .collect();
         let summary = self.get_session_summary(session_id).await?;
+        let stats = self.get_session_stats(session_id).await.unwrap_or_default();
+        let timeline = self
+            .get_session_timeline(session_id, 20)
+            .await
+            .unwrap_or_default();
         Ok(serde_json::json!({
             "session": {
                 "id": session.id,
@@ -2847,7 +2930,9 @@ impl Storage {
             "person": person,
             "opportunity": opportunity,
             "tasks": tasks_json,
-            "summary": summary
+            "summary": summary,
+            "stats": stats,
+            "timeline": timeline
         }))
     }
 
@@ -2911,5 +2996,297 @@ impl Storage {
             }
         }
         Ok(map)
+    }
+
+    // -----------------------------------------------------------------------
+    // Session Stats (100% derived, no persistence)
+    // -----------------------------------------------------------------------
+    pub async fn get_session_stats(
+        &self,
+        session_id: i64,
+    ) -> Result<crate::session_stats::ResearchSessionStats, StorageError> {
+        let map = self.get_sessions_stats(&[session_id]).await?;
+        Ok(map.get(&session_id).cloned().unwrap_or_default())
+    }
+
+    pub async fn get_sessions_stats(
+        &self,
+        session_ids: &[i64],
+    ) -> Result<
+        std::collections::HashMap<i64, crate::session_stats::ResearchSessionStats>,
+        StorageError,
+    > {
+        use std::collections::HashMap;
+        let mut result: HashMap<i64, crate::session_stats::ResearchSessionStats> = HashMap::new();
+        for sid in session_ids {
+            result.insert(*sid, crate::session_stats::ResearchSessionStats::default());
+        }
+        if session_ids.is_empty() {
+            return Ok(result);
+        }
+        // Verify sessions exist? Not needed; missing will stay default
+        let placeholders = session_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        // 1) tasks per status
+        let sql_tasks = format!(
+            "SELECT session_id, status, COUNT(*) as cnt FROM research_tasks WHERE session_id IN ({placeholders}) GROUP BY session_id, status"
+        );
+        let mut q = sqlx::query_as::<_, (i64, String, i64)>(&sql_tasks);
+        for sid in session_ids {
+            q = q.bind(sid);
+        }
+        let task_rows: Vec<(i64, String, i64)> = q.fetch_all(&self.pool).await.unwrap_or_default();
+        for (sid, status, cnt) in task_rows {
+            if let Some(s) = result.get_mut(&sid) {
+                s.total_tasks += cnt;
+                match status.as_str() {
+                    "OPEN" => s.open_tasks += cnt,
+                    "IN_PROGRESS" => s.in_progress_tasks += cnt,
+                    "RESOLVED" => s.completed_tasks += cnt,
+                    "INCONCLUSIVE" => s.inconclusive_tasks += cnt,
+                    "REJECTED" => s.rejected_tasks += cnt,
+                    _ => {}
+                }
+            }
+        }
+        // 2) outcomes per type via tasks
+        let sql_out = format!(
+            "SELECT rt.session_id as sid, ro.type as otype, COUNT(*) as cnt FROM research_outcomes ro JOIN research_tasks rt ON ro.task_id = rt.id WHERE rt.session_id IN ({placeholders}) GROUP BY rt.session_id, ro.type"
+        );
+        let mut q2 = sqlx::query_as::<_, (i64, String, i64)>(&sql_out);
+        for sid in session_ids {
+            q2 = q2.bind(sid);
+        }
+        let out_rows: Vec<(i64, String, i64)> = q2.fetch_all(&self.pool).await.unwrap_or_default();
+        for (sid, otype, cnt) in out_rows {
+            if let Some(s) = result.get_mut(&sid) {
+                s.total_outcomes += cnt;
+                match otype.as_str() {
+                    "CONFIRMED" => s.confirmed_outcomes += cnt,
+                    "FALSE_LEAD" => s.false_lead_outcomes += cnt,
+                    "INCONCLUSIVE" => s.inconclusive_outcomes += cnt,
+                    "NEW_LEAD" => s.new_lead_outcomes += cnt,
+                    "NO_EVIDENCE" => s.no_evidence_outcomes += cnt,
+                    _ => {}
+                }
+            }
+        }
+        // 3) evidence per relationship via tasks->outcomes->outcome_evidence
+        let sql_ev = format!(
+            "SELECT rt.session_id as sid, oe.relationship as rel, COUNT(*) as cnt FROM outcome_evidence oe JOIN research_outcomes ro ON oe.outcome_id = ro.id JOIN research_tasks rt ON ro.task_id = rt.id WHERE rt.session_id IN ({placeholders}) GROUP BY rt.session_id, oe.relationship"
+        );
+        let mut q3 = sqlx::query_as::<_, (i64, String, i64)>(&sql_ev);
+        for sid in session_ids {
+            q3 = q3.bind(sid);
+        }
+        let ev_rows: Vec<(i64, String, i64)> = q3.fetch_all(&self.pool).await.unwrap_or_default();
+        for (sid, rel, cnt) in ev_rows {
+            if let Some(s) = result.get_mut(&sid) {
+                s.total_evidence += cnt;
+                match rel.as_str() {
+                    "SUPPORTS" => s.supporting_evidence += cnt,
+                    "CONTRADICTS" => s.contradicting_evidence += cnt,
+                    _ => {}
+                }
+            }
+        }
+        // 4) followup actions per status via tasks
+        let sql_fa = format!(
+            "SELECT rt.session_id as sid, rfa.status as st, COUNT(*) as cnt FROM research_followup_actions rfa JOIN research_tasks rt ON rfa.task_id = rt.id WHERE rt.session_id IN ({placeholders}) GROUP BY rt.session_id, rfa.status"
+        );
+        let mut q4 = sqlx::query_as::<_, (i64, String, i64)>(&sql_fa);
+        for sid in session_ids {
+            q4 = q4.bind(sid);
+        }
+        let fa_rows: Vec<(i64, String, i64)> = q4.fetch_all(&self.pool).await.unwrap_or_default();
+        for (sid, st, cnt) in fa_rows {
+            if let Some(s) = result.get_mut(&sid) {
+                match st.as_str() {
+                    "OPEN" => s.open_followups += cnt,
+                    "COMPLETED" => s.completed_followup_actions += cnt,
+                    "SKIPPED" => s.skipped_followup_actions += cnt,
+                    _ => {}
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    pub async fn get_session_timeline(
+        &self,
+        session_id: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::session_stats::ResearchSessionTimelineEvent>, StorageError> {
+        let session = self
+            .get_research_session(session_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("session {session_id} not found")))?;
+        let mut events: Vec<crate::session_stats::ResearchSessionTimelineEvent> = Vec::new();
+        // session events
+        events.push(crate::session_stats::ResearchSessionTimelineEvent {
+            event_type: "SESSION_CREATED".into(),
+            timestamp: session.created_at.clone(),
+            label: "Session created".into(),
+        });
+        if let Some(s) = session.started_at.clone() {
+            events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                event_type: "SESSION_STARTED".into(),
+                timestamp: s,
+                label: "Session started".into(),
+            });
+        }
+        if let Some(c) = session.completed_at.clone() {
+            let label = if session.status == "COMPLETED" {
+                "Session completed"
+            } else if session.status == "ABANDONED" {
+                "Session abandoned"
+            } else {
+                "Session completed"
+            };
+            events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                event_type: "SESSION_COMPLETED".into(),
+                timestamp: c,
+                label: label.into(),
+            });
+        } else if session.updated_at != session.created_at {
+            // include updated as generic activity if not already covered? Spec says use available timestamps, but don't invent.
+            // We will not add generic updated event to avoid noise; only when meaningful status change already covered.
+        }
+        // tasks for session
+        let tasks = self.list_tasks_for_session(session_id).await?;
+        for t in &tasks {
+            events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                event_type: "TASK_CREATED".into(),
+                timestamp: t.created_at.clone(),
+                label: format!("Task created: {}", t.title),
+            });
+            if let Some(s) = t.started_at.clone() {
+                events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                    event_type: "TASK_STARTED".into(),
+                    timestamp: s,
+                    label: format!("Task started: {}", t.title),
+                });
+            }
+            if let Some(c) = t.completed_at.clone() {
+                events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                    event_type: "TASK_COMPLETED".into(),
+                    timestamp: c,
+                    label: format!("Task completed: {}", t.title),
+                });
+            } else if t.updated_at != t.created_at {
+                // task updated (e.g., status change to IN_PROGRESS without started_at? already handled)
+                // Include generic task updated as "Task updated" if not already completed? But spec says don't invent.
+                // We'll include an update event only if status is IN_PROGRESS and started_at is None? Already covered by started.
+                // For now, skip generic updated to avoid duplicates.
+            }
+            // outcome for task
+            if let Some(o) = self.get_research_outcome_by_task(t.id).await? {
+                events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                    event_type: "OUTCOME_CREATED".into(),
+                    timestamp: o.created_at.clone(),
+                    label: format!("Outcome created: {}", o.r#type),
+                });
+                if o.updated_at != o.created_at {
+                    events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                        event_type: "OUTCOME_UPDATED".into(),
+                        timestamp: o.updated_at.clone(),
+                        label: format!("Outcome updated: {}", o.r#type),
+                    });
+                }
+                // evidence for outcome (limited to those linked via outcome)
+                let links = self.list_outcome_evidence(o.id).await?;
+                for link in links {
+                    if let Some(ev) = self.get_evidence(link.evidence_id).await? {
+                        events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                            event_type: "EVIDENCE_ADDED".into(),
+                            timestamp: ev.created_at.clone(),
+                            label: format!(
+                                "Evidence added: {}",
+                                ev.statement.chars().take(40).collect::<String>()
+                            ),
+                        });
+                    }
+                }
+            }
+            // followup actions for task
+            let fas = sqlx::query_as::<_, ResearchFollowupActionRow>(
+                "SELECT * FROM research_followup_actions WHERE task_id=?1 ORDER BY created_at ASC",
+            )
+            .bind(t.id)
+            .fetch_all(&self.pool)
+            .await
+            .unwrap_or_default();
+            for fa in fas {
+                events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                    event_type: "FOLLOWUP_ACTION_CREATED".into(),
+                    timestamp: fa.created_at.clone(),
+                    label: format!("Follow-up {} created", fa.followup_code),
+                });
+                if let Some(comp) = fa.completed_at.clone() {
+                    events.push(crate::session_stats::ResearchSessionTimelineEvent {
+                        event_type: "FOLLOWUP_ACTION_COMPLETED".into(),
+                        timestamp: comp,
+                        label: format!("Follow-up {} completed", fa.followup_code),
+                    });
+                }
+            }
+        }
+        // Order DESC most recent first, tie by timestamp then event_type
+        events.sort_by(|a, b| {
+            let ord = b.timestamp.cmp(&a.timestamp);
+            if ord != std::cmp::Ordering::Equal {
+                return ord;
+            }
+            a.event_type.cmp(&b.event_type)
+        });
+        if events.len() as i64 > limit {
+            events.truncate(limit as usize);
+        }
+        Ok(events)
+    }
+
+    pub async fn list_research_sessions_history(
+        &self,
+        tree_id: i64,
+        status: Option<&str>,
+        person_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchSessionRow>, i64), StorageError> {
+        // History only includes COMPLETED and ABANDONED
+        let mut sql =
+            "SELECT * FROM research_sessions WHERE tree_id = ? AND status IN ('COMPLETED','ABANDONED')"
+                .to_string();
+        let mut count_sql =
+            "SELECT COUNT(*) FROM research_sessions WHERE tree_id = ? AND status IN ('COMPLETED','ABANDONED')"
+                .to_string();
+        if status.is_some() {
+            // validate that s is one of allowed history statuses; caller should validate
+            sql.push_str(" AND status = ?");
+            count_sql.push_str(" AND status = ?");
+        }
+        if person_id.is_some() {
+            sql.push_str(" AND person_id = ?");
+            count_sql.push_str(" AND person_id = ?");
+        }
+        // Order completed_at DESC, if NULL then updated_at DESC
+        sql.push_str(" ORDER BY COALESCE(completed_at, updated_at) DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchSessionRow>(&sql).bind(tree_id);
+        if let Some(s) = status {
+            cq = cq.bind(s);
+            q = q.bind(s);
+        }
+        if let Some(pid) = person_id {
+            cq = cq.bind(pid);
+            q = q.bind(pid);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
     }
 }

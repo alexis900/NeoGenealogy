@@ -47,7 +47,7 @@ Tablas principales (con `tree_id` como límite de aislamiento):
 - `branch_analyses(id, tree_id, analysis_run_id, name, score, opportunity_count, high_priority_count, deepest_generation, source_coverage)`
 - `source_coverages(id, tree_id, analysis_run_id, birth, marriage, death, other_events, overall)`
  - `research_tasks(id, tree_id, opportunity_id FK SET NULL, person_id FK SET NULL, title, description, status CHECK, created_at, updated_at, started_at, completed_at, resolution, session_id FK SET NULL, UNIQUE(active opportunity))`
- - `research_sessions(id, tree_id FK CASCADE, title, description, status CHECK(PLANNED/ACTIVE/COMPLETED/ABANDONED), person_id FK SET NULL, opportunity_id FK SET NULL, created_at, updated_at, started_at, completed_at)` — ver `docs/RESEARCH_SESSIONS.md`
+ - `research_sessions(id, tree_id FK CASCADE, title, description, status CHECK(PLANNED/ACTIVE/COMPLETED/ABANDONED), person_id FK SET NULL, opportunity_id FK SET NULL, created_at, updated_at, started_at, completed_at)` — ver `docs/RESEARCH_SESSIONS.md` — no nueva tabla para stats (derivado, ver `docs/RESEARCH_SESSIONS_HISTORY.md`)
  - `research_outcomes(id, tree_id FK CASCADE, task_id UNIQUE FK CASCADE, type CHECK(CONFIRMED…), summary, details, created_at, updated_at)` — ver `docs/RESEARCH_OUTCOMES.md`
  - `research_sources(id, tree_id FK CASCADE, title, author, publication, date, type CHECK(BOOK…OTHER), created_at, updated_at)` — ver `docs/EVIDENCE_SOURCES.md` (tabla `sources` GEDCOM permanece en `gedcom_sources`)
 - `research_citations(id, source_id FK CASCADE, locator, text, created_at, updated_at)`
@@ -122,7 +122,8 @@ get_tree, list_trees, get_person, list_persons(limit/offset), get_family, list_f
 get_findings, get_research_opportunities, get_top_research_opportunities(limit, priority>=High),
 get_branches, get_source_coverage, get_analysis_runs, count(tree_id),
 create_research_task, get_research_task, list_research_tasks, update_research_task, delete_research_task,
-create_research_session, get_research_session, list_research_sessions, update_research_session, delete_research_session, assign_task_to_session, remove_task_from_session, list_tasks_for_session, get_session_summary, get_session_detail, get_tasks_session_map, get_active_sessions_by_opportunity (sessions, batch sin N+1),
+create_research_session, get_research_session, list_research_sessions, update_research_session, delete_research_session, assign_task_to_session, remove_task_from_session, list_tasks_for_session, get_session_summary, get_session_detail (ahora con stats+timeline), get_tasks_session_map, get_active_sessions_by_opportunity (sessions, batch sin N+1),
+get_session_stats, get_sessions_stats (batch GROUP BY tasks/outcomes/evidence/followups, sin N+1), get_session_timeline (20 DESC derivado), list_research_sessions_history (COMPLETED/ABANDONED, COALESCE(completed_at,updated_at) DESC, batch stats),
 create_research_outcome, get_research_outcome, get_research_outcome_by_task, list_research_outcomes, list_research_outcomes_with_person, update_research_outcome, delete_research_outcome,
 create_research_source, get_research_source, list_research_sources, update_research_source, delete_research_source,
 create_research_citation, get_research_citation, list_research_citations, update_research_citation, delete_research_citation,
@@ -131,8 +132,8 @@ create_research_citation, get_research_citation, list_research_citations, update
     get_outcome_evidence_stats, get_outcomes_evidence_stats, get_outcome_assessment, get_outcomes_assessments, get_outcome_gaps, get_outcomes_gaps, get_outcome_followups, get_outcomes_followups (batch sin N+1, `EvidenceStats` → `calculate_evidence_assessment` / `calculate_evidence_gaps` / `calculate_research_followups`),
      create_followup_action, get_followup_action, list_followup_actions, list_task_followup_actions, list_outcome_followup_actions, get_outcomes_followup_actions_counts, update_followup_action, delete_followup_action, count_followup_actions_by_status,
      get_research_case_summary(tree_id, task_id) → ResearchCaseSummary {task, person, opportunity, outcome, evidence_assessment, evidence_gaps, research_followups, followup_actions, timeline, closure_warnings} (vista derivada, sin persistencia, batch sin N+1, isolation por tree_id),
-    get_research_planning_candidates(tree_id) → Vec<PlanningCandidate> (opportunity+task+outcome+gaps batch, O(1) queries, isolation por tree_id) + planning::calculate_planning_score / calculate_research_plan puros (determinista, sin persistencia, RD sin N+1),
-    research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info} + research_followups {high,medium,low} + followup_actions {open,completed,skipped})
+     get_research_planning_candidates(tree_id) → Vec<PlanningCandidate> (opportunity+task+outcome+gaps batch, O(1) queries, isolation por tree_id) + planning::calculate_planning_score / calculate_research_plan puros (determinista, sin persistencia, RD sin N+1),
+     research_summary (con sources/evidence counts + assessment {no_evidence,weak,mixed,supported,strongly_supported} + evidence_gaps {critical,warning,info} + research_followups {high,medium,low} + followup_actions {open,completed,skipped} + sessions {total,active,planned,completed,abandoned} + research_activity {tasks, outcomes, evidence, followups} — derivado, sin persistencia, compatible)
 ```
 
 Paginación: `limit/offset` en listados para preparar futura API HTTP sin rediseñar acceso a datos.

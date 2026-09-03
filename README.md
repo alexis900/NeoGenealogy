@@ -1,6 +1,6 @@
-# NeoGenealogy v0.5.2 — Research Sessions
+# NeoGenealogy v0.5.3 — Research Sessions History & Statistics
 
-Herramienta local de análisis genealógico. Release v0.5.2 añade **Research Sessions**: contenedor de contexto `PLANNED/ACTIVE/COMPLETED/ABANDONED` que convierte `Opportunity → Planning → Session → Task(s) → Outcome`; `Start Research` crea Session (modal) en vez de Task directa, Planning muestra `Active Session` + `View Session`, Task puede asociarse a Session, Overview muestra `Active/Planned` + `Current Session`. 5.1 aportó Planning UI `What should I research next?`, 5.0 el motor determinista.
+Herramienta local de análisis genealógico. Release v0.5.3 añade **Research Sessions History & Statistics** (100% derivado, sin persistencia): `/research/sessions/history` con filtros `status/person_id` y stats batch (`tasks/outcomes/evidence/followups`), `Session Detail` con `Session Summary` + `Research Activity` + `timeline` derivada 20 DESC, `Overview` con bloque `Research Activity` y `GET /research/summary` ampliado con `sessions` + `research_activity`. 0.5.2 aportó Sessions `PLANNED/ACTIVE/COMPLETED/ABANDONED` (`Opportunity → Planning → Session → Task(s) → Outcome`); 5.1 Planning UI `What should I research next?`, 5.0 motor determinista.
 
 ```
 WHAT THE SYSTEM FOUND        → Research Opportunity (auto)
@@ -54,12 +54,12 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
- - `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Sessions` (006, persistente, `PLANNED/ACTIVE/COMPLETED/ABANDONED`, `research_tasks.session_id`) + `Research Case Summary` (derivado) + `Research Planning` (derivado, sin persistencia)
- - `api` — Axum REST `/api/v1` (paginación, filtros, Research Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Sessions, Case Summary, Planning, OpenAPI)
+ - `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Sessions` (006, `PLANNED/ACTIVE/COMPLETED/ABANDONED`, `session_id`) + `Research Case Summary` / `Planning` / `Session History & Stats` (todo derivado, sin nuevas tablas, `GROUP BY` batch)
+ - `api` — Axum REST `/api/v1` (paginación, filtros, Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Sessions, Session History, Case Summary, Planning, Research Summary con `sessions`+`research_activity`, OpenAPI)
  - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
- - `web/` — React 19 + Vite + Tailwind + React Router (Research Workspace + Planning + Sessions + Tasks + Outcome + Evidence + Case Summary)
+ - `web/` — React 19 + Vite + Tailwind + React Router (Workspace + Planning + Sessions + Session History + Tasks + Outcome + Evidence + Case Summary)
 
-Véase `docs/RESEARCH_PLANNING.md`, `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
+ Véase `docs/RESEARCH_SESSIONS_HISTORY.md`, `docs/RESEARCH_PLANNING.md`, `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 
 ## Web UI
 
@@ -74,8 +74,8 @@ npm run build  # tsc -b && vite build
 npm run test   # vitest run
 ```
 
-Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace: **Sessions Active/Planned + Current Session** + Planning preview + Opportunities/Active Tasks/Recent Outcomes), `/trees/:treeId/research/planning` (Planning → **Start Research** abre **Create Session** modal + muestra `Active Session`/`View Session`), `/trees/:treeId/research/sessions` (Sessions list), `/trees/:treeId/research/sessions/:sessionId` (Session Detail: Objective/Person/Opportunity/Tasks + Progress + Complete/Abandon/Reopen), `/trees/:treeId/research/tasks` (Tasks con `session`), `/trees/:treeId/research/tasks/:taskId` (Task Detail con bloque **Research Session** Add/Remove/View), `/trees/:treeId/research/history` (History), `/trees/:treeId/sources` (Sources), `/trees/:treeId/evidence` (Evidence).
-Workflow: `Opportunity → Planning → Session (PLANNED→ACTIVE→COMPLETED) → Task(s) → Outcome → Evidence → Assessment → Gaps → Follow-ups → Case Summary` — ver `docs/RESEARCH_SESSIONS.md`.
+Rutas: `/`, `/trees`, `/trees/:treeId`, `/trees/:treeId/research` (Workspace: **Sessions Active/Planned + Current Session + Research Activity** + Planning preview + Opportunities/Active Tasks/Recent Outcomes), `/trees/:treeId/research/planning` (Planning → **Start Research** abre **Create Session** modal + muestra `Active Session`/`View Session`), `/trees/:treeId/research/sessions` (Sessions list con tabs Active & Planned / History), `/trees/:treeId/research/sessions/history` (Session History: COMPLETED/ABANDONED, filtros status/person, stats batch), `/trees/:treeId/research/sessions/:sessionId` (Session Detail: Objective/Person/Opportunity/Tasks + Session Summary + Research Activity + Progress + Task progress + timeline + Complete/Abandon/Reopen), `/trees/:treeId/research/tasks` (Tasks con `session`), `/trees/:treeId/research/tasks/:taskId` (Task Detail con bloque **Research Session** Add/Remove/View), `/trees/:treeId/research/history` (History outcomes), `/trees/:treeId/sources` (Sources), `/trees/:treeId/evidence` (Evidence).
+Workflow: `Opportunity → Planning → Session (PLANNED→ACTIVE→COMPLETED) → Task(s) → Outcome → Evidence → Assessment → Gaps → Follow-ups → Case Summary → Session History + Statistics` — ver `docs/RESEARCH_SESSIONS_HISTORY.md`.
 
 ## API REST
 

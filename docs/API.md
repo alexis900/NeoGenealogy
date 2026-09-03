@@ -289,6 +289,24 @@ POST   /api/v1/research-sessions {tree_id,title,...} → 201 (generic)
 
 Ver `docs/RESEARCH_SESSIONS.md`.
 
+## Research Session History & Statistics — Fase 5.3
+
+```
+GET    /api/v1/trees/:tree_id/research-sessions/history?status=COMPLETED&person_id=5&limit=20&page=1 → {items:[{id,tree_id,title,status,completed_at,stats:{total_tasks,completed_tasks,open_tasks,in_progress_tasks,inconclusive_tasks,rejected_tasks,total_outcomes,confirmed_outcomes,false_lead_outcomes,inconclusive_outcomes,new_lead_outcomes,no_evidence_outcomes,total_evidence,supporting_evidence,contradicting_evidence,open_followups,completed_followup_actions,skipped_followup_actions}}], pagination}
+GET    /api/v1/research-sessions/history?tree_id=1&status=ABANDONED&person_id=5&limit=20&offset=0 → Paginated (generic, tree_id requerido)
+GET    /api/v1/trees/:tree_id/research-sessions?history=true → alias que delega a history
+GET    /api/v1/trees/:tree_id/research-sessions/:session_id → {session, person, opportunity, tasks, summary, stats, timeline:[{event_type,timestamp,label}]}
+GET    /api/v1/trees/:tree_id/research/summary → {opportunities, tasks, outcomes:{total,confirmed,false_lead,inconclusive,new_lead,no_evidence}, evidence, assessment, evidence_gaps, research_followups, followup_actions, sessions:{total,active,planned,completed,abandoned}, research_activity:{tasks:{open,in_progress,resolved,rejected,inconclusive,total}, outcomes:{...}, evidence:{...}, followups:{open,completed,skipped,total}}}
+```
+
+- History solo `COMPLETED`/`ABANDONED` (400 `INVALID_SESSION_STATUS` si otro), orden `COALESCE(completed_at, updated_at) DESC`, filtros `status` y `person_id`, paginación `limit/offset/page`.
+- Cada item de History incluye `stats` derivado batch (`1 query sessions + 4 GROUP BY`) sin N+1, tree isolation estricta.
+- `GET /research-sessions/:id` ahora incluye `stats` (100% derivado, no Scoring, no truth) y `timeline` (20 eventos `DESC`, derivado de `session/task/outcome/evidence/followup` timestamps, sin tabla `events`).
+- `GET /research/summary` amplía `sessions` y `research_activity` (tasks/outcomes/evidence/followups distribution) manteniendo compatibilidad con campos antiguos.
+- No modifica `Research Score`, `Planning Score`; no crea `Session Score` ni `Success Rate`.
+
+Ver `docs/RESEARCH_SESSIONS_HISTORY.md`.
+
 ## Errores
 
 ```json

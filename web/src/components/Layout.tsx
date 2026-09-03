@@ -15,6 +15,9 @@ export default function Layout(){
             {link(`${base}/research/planning`, "Planning")}
             {link(`${base}/research/opportunities`, "Opportunities")}
             {link(`${base}/research/sessions`, "Sessions")}
+            <div className="pl-3">
+              {link(`${base}/research/sessions/history`, "History")}
+            </div>
             {link(`${base}/research/tasks`, "Tasks")}
             {link(`${base}/research/history`, "History")}
           </div>

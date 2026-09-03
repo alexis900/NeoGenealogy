@@ -6,6 +6,7 @@ pub mod import;
 pub mod models;
 pub mod planning;
 pub mod repositories;
+pub mod session_stats;
 
 pub use db::{establish_pool, establish_pool_from_path, run_migrations};
 pub use error::StorageError;

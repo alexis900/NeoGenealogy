@@ -40,12 +40,14 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/followup-actions": { "get": { "summary": "List followup actions for task" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/case-summary": { "get": { "summary": "Get research case summary", "description": "Derived view: task + person + opportunity + outcome + evidence_assessment + evidence_gaps + research_followups + followup_actions + timeline + closure_warnings. 404 only if TASK_NOT_FOUND. No persistent CaseStatus." } },
             "/api/v1/trees/{tree_id}/research/plan": { "get": { "summary": "Get research plan", "description": "Deterministic planning: research_score*0.55 + researchability*0.20 + confidence*0.10 + evidence_gap*0.10 + task_state*0.05. No persistence. Sorted planning_score DESC, research_score DESC, confidence DESC, opportunity_id ASC. Returns recommended (top 10 by default, limit param) and deferred. Query params: limit 1..100 default 10, min_score 0..100, priority, researchability.", "parameters": [{"name":"limit","description":"Recommended size, default 10 max 100"},{"name":"min_score","description":"Minimum planning_score 0..100"},{"name":"priority","description":"Filter by priority: low,info,medium,warning,high,critical"},{"name":"researchability","description":"Filter by researchability: low,medium,high"}] } },
-            "/api/v1/trees/{tree_id}/research-sessions": { "get": { "summary": "List research sessions", "parameters": [{"name":"status"},{"name":"person_id"},{"name":"opportunity_id"},{"name":"limit"},{"name":"offset"}] }, "post": { "summary": "Create research session" } },
-            "/api/v1/trees/{tree_id}/research-sessions/{session_id}": { "get": { "summary": "Get research session (with person/opportunity/tasks/summary)" }, "patch": { "summary": "Update research session (title/description/status/person_id/opportunity_id)" }, "delete": { "summary": "Delete research session" } },
+            "/api/v1/trees/{tree_id}/research-sessions": { "get": { "summary": "List research sessions", "parameters": [{"name":"status"},{"name":"person_id"},{"name":"opportunity_id"},{"name":"limit"},{"name":"offset"},{"name":"history","description":"If true, delegates to history (COMPLETED/ABANDONED)"}] }, "post": { "summary": "Create research session" } },
+            "/api/v1/trees/{tree_id}/research-sessions/history": { "get": { "summary": "List research session history (COMPLETED/ABANDONED, ordered completed_at DESC fallback updated_at DESC)", "parameters": [{"name":"status","description":"COMPLETED or ABANDONED"},{"name":"person_id"},{"name":"limit"},{"name":"offset"},{"name":"page"}] } },
+            "/api/v1/trees/{tree_id}/research-sessions/{session_id}": { "get": { "summary": "Get research session (with person/opportunity/tasks/summary/stats/timeline)", "description": "Includes derived stats {total_tasks,completed_tasks,open_tasks,in_progress_tasks,inconclusive_tasks,rejected_tasks,total_outcomes,confirmed_outcomes,false_lead_outcomes,inconclusive_outcomes,new_lead_outcomes,no_evidence_outcomes,total_evidence,supporting_evidence,contradicting_evidence,open_followups,completed_followup_actions,skipped_followup_actions} and timeline [{event_type,timestamp,label}] (20 latest, DESC). No persistence." }, "patch": { "summary": "Update research session (title/description/status/person_id/opportunity_id)" }, "delete": { "summary": "Delete research session" } },
             "/api/v1/trees/{tree_id}/research-sessions/{session_id}/tasks": { "get": { "summary": "List tasks for session" } },
             "/api/v1/trees/{tree_id}/research-tasks/{task_id}/session": { "post": { "summary": "Assign task to session" }, "delete": { "summary": "Remove task from session" } },
             "/api/v1/research-sessions": { "get": { "summary": "List research sessions (generic)" }, "post": { "summary": "Create research session (generic, tree_id in body)" } },
             "/api/v1/research-sessions/{session_id}": { "get": { "summary": "Get research session generic" }, "patch": { "summary": "Update research session generic" }, "delete": { "summary": "Delete research session generic" } },
+            "/api/v1/research-sessions/history": { "get": { "summary": "List research session history (generic, requires tree_id)", "parameters": [{"name":"tree_id"},{"name":"status"},{"name":"person_id"},{"name":"limit"},{"name":"offset"},{"name":"page"}] } },
         },
         "components": {
             "schemas": {
@@ -238,7 +240,9 @@ pub async fn get_openapi() -> Json<Value> {
                         "person": { "type": "object", "nullable": true },
                         "opportunity": { "type": "object", "nullable": true },
                         "tasks": { "type": "array" },
-                        "summary": { "type": "object", "properties": { "total_tasks": { "type": "integer" }, "open_tasks": { "type": "integer" }, "in_progress_tasks": { "type": "integer" }, "terminal_tasks": { "type": "integer" }, "outcomes_count": { "type": "integer" } } }
+                        "summary": { "type": "object", "properties": { "total_tasks": { "type": "integer" }, "open_tasks": { "type": "integer" }, "in_progress_tasks": { "type": "integer" }, "terminal_tasks": { "type": "integer" }, "outcomes_count": { "type": "integer" } } },
+                        "stats": { "$ref": "#/components/schemas/ResearchSessionStats" },
+                        "timeline": { "type": "array", "items": { "$ref": "#/components/schemas/ResearchSessionTimelineEvent" } }
                     }
                 },
                 "ResearchSessionSummary": {
@@ -249,6 +253,58 @@ pub async fn get_openapi() -> Json<Value> {
                         "in_progress_tasks": { "type": "integer" },
                         "terminal_tasks": { "type": "integer" },
                         "outcomes_count": { "type": "integer" }
+                    }
+                },
+                "ResearchSessionStats": {
+                    "type": "object",
+                    "description": "100% derived from research_sessions/research_tasks/research_outcomes/evidence/followups. No persistence.",
+                    "properties": {
+                        "total_tasks": { "type": "integer" },
+                        "completed_tasks": { "type": "integer", "description": "RESOLVED" },
+                        "open_tasks": { "type": "integer" },
+                        "in_progress_tasks": { "type": "integer" },
+                        "inconclusive_tasks": { "type": "integer" },
+                        "rejected_tasks": { "type": "integer" },
+                        "total_outcomes": { "type": "integer" },
+                        "confirmed_outcomes": { "type": "integer" },
+                        "false_lead_outcomes": { "type": "integer" },
+                        "inconclusive_outcomes": { "type": "integer" },
+                        "new_lead_outcomes": { "type": "integer" },
+                        "no_evidence_outcomes": { "type": "integer" },
+                        "total_evidence": { "type": "integer" },
+                        "supporting_evidence": { "type": "integer" },
+                        "contradicting_evidence": { "type": "integer" },
+                        "open_followups": { "type": "integer", "description": "OPEN followup actions" },
+                        "completed_followup_actions": { "type": "integer" },
+                        "skipped_followup_actions": { "type": "integer" }
+                    }
+                },
+                "ResearchSessionTimelineEvent": {
+                    "type": "object",
+                    "description": "Derived from timestamps, 20 latest DESC, no event table.",
+                    "properties": {
+                        "event_type": { "type": "string", "enum": ["SESSION_CREATED","SESSION_STARTED","SESSION_COMPLETED","TASK_CREATED","TASK_STARTED","TASK_COMPLETED","OUTCOME_CREATED","OUTCOME_UPDATED","EVIDENCE_ADDED","FOLLOWUP_ACTION_CREATED","FOLLOWUP_ACTION_COMPLETED"] },
+                        "timestamp": { "type": "string", "format": "date-time" },
+                        "label": { "type": "string" }
+                    }
+                },
+                "ResearchActivitySummary": {
+                    "type": "object",
+                    "properties": {
+                        "tasks": { "type": "object", "properties": { "open": {"type":"integer"}, "in_progress": {"type":"integer"}, "resolved": {"type":"integer"}, "rejected": {"type":"integer"}, "inconclusive": {"type":"integer"}, "total": {"type":"integer"} } },
+                        "outcomes": { "type": "object", "properties": { "total": {"type":"integer"}, "confirmed": {"type":"integer"}, "false_lead": {"type":"integer"}, "inconclusive": {"type":"integer"}, "new_lead": {"type":"integer"}, "no_evidence": {"type":"integer"} } },
+                        "evidence": { "type": "object", "properties": { "total": {"type":"integer"}, "supporting": {"type":"integer"}, "contradicting": {"type":"integer"} } },
+                        "followups": { "type": "object", "properties": { "open": {"type":"integer"}, "completed": {"type":"integer"}, "skipped": {"type":"integer"}, "total": {"type":"integer"} } }
+                    }
+                },
+                "ResearchSummarySessions": {
+                    "type": "object",
+                    "properties": {
+                        "total": {"type":"integer"},
+                        "active": {"type":"integer"},
+                        "planned": {"type":"integer"},
+                        "completed": {"type":"integer"},
+                        "abandoned": {"type":"integer"}
                     }
                 }
             }

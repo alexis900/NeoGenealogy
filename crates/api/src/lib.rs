@@ -171,6 +171,10 @@ pub fn create_router(state: AppState) -> Router {
                 .delete(handlers::research_sessions::delete_session),
         )
         .route(
+            "/trees/:tree_id/research-sessions/history",
+            get(handlers::research_sessions::list_sessions_history),
+        )
+        .route(
             "/trees/:tree_id/research-sessions/:session_id/tasks",
             get(handlers::research_sessions::list_session_tasks),
         )
@@ -178,6 +182,10 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research-tasks/:task_id/session",
             post(handlers::research_sessions::assign_task_to_session)
                 .delete(handlers::research_sessions::remove_task_from_session),
+        )
+        .route(
+            "/research-sessions/history",
+            get(handlers::research_sessions::list_sessions_history_generic),
         )
         // Generic session routes for spec compatibility (tree_id in body or path-less)
         .route(

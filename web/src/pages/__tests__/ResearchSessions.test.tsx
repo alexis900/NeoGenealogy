@@ -15,7 +15,9 @@ vi.mock("../../api/client", () => ({
       person: { id: 5, name: "Josep García", gedcom_id: "I1" },
       opportunity: { id: 10, title: "Find his parents", priority: "HIGH", score: 80, person_id: 5 },
       tasks: [{ id: 100, tree_id: 1, title: "Task A", status: "OPEN", person_id: 5, updated_at: new Date().toISOString(), has_outcome: false }],
-      summary: { total_tasks: 1, open_tasks: 1, in_progress_tasks: 0, terminal_tasks: 0, outcomes_count: 0 }
+      summary: { total_tasks: 1, open_tasks: 1, in_progress_tasks: 0, terminal_tasks: 0, outcomes_count: 0 },
+      stats: { total_tasks: 1, completed_tasks: 0, open_tasks: 1, in_progress_tasks: 0, inconclusive_tasks: 0, rejected_tasks: 0, total_outcomes: 0, confirmed_outcomes: 0, false_lead_outcomes: 0, inconclusive_outcomes: 0, new_lead_outcomes: 0, no_evidence_outcomes: 0, total_evidence: 0, supporting_evidence: 0, contradicting_evidence: 0, open_followups: 0, completed_followup_actions: 0, skipped_followup_actions: 0 },
+      timeline: []
     })),
     getTasks: vi.fn(() => Promise.resolve({ items: [], pagination: { limit: 50, offset: 0, total: 0 } })),
     createSession: vi.fn(() => Promise.resolve({ session: { id: 3, title: "New" } })),

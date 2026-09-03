@@ -108,7 +108,7 @@ export const api = {
   createOutcome: (treeId:number, taskId:number, body:{type:string;summary:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/outcome`,{method:"POST", body:JSON.stringify(body)}),
   updateOutcome: (treeId:number, outcomeId:number, body:{type?:string;summary?:string;details?:string})=> req<import("./types").ResearchOutcome>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"PATCH", body:JSON.stringify(body)}),
   deleteOutcome: (treeId:number, outcomeId:number)=> req<void>(`/api/v1/trees/${treeId}/research-outcomes/${outcomeId}`,{method:"DELETE"}),
-  getResearchSummary: (treeId:number)=> req<{opportunities:{high:number;medium:number;low:number}; tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number}; outcomes:{total:number}; sources?:{total:number}; evidence?:{total:number;supporting:number;contradicting:number}; assessment?:{no_evidence:number;weak:number;mixed:number;supported:number;strongly_supported:number}; evidence_gaps?:{critical:number;warning:number;info:number}; research_followups?:{high:number;medium:number;low:number}; followup_actions?:{open:number;completed:number;skipped:number}}>(`/api/v1/trees/${treeId}/research/summary`),
+  getResearchSummary: (treeId:number)=> req<import("./types").ResearchSummary>(`/api/v1/trees/${treeId}/research/summary`),
   // Followup Actions
   getFollowupActions: (treeId:number, params?:{task_id?:number;outcome_id?:number;status?:string;followup_code?:string;limit?:number;offset?:number})=>{
     const q=new URLSearchParams();
@@ -187,15 +187,26 @@ export const api = {
   // Case Summary
   getCaseSummary: (treeId:number, taskId:number)=> req<import("./types").ResearchCaseSummary>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/case-summary`),
   // Research Sessions
-  getSessions: (treeId:number, params?:{status?:string;person_id?:number;opportunity_id?:number;limit?:number;offset?:number})=>{
+  getSessions: (treeId:number, params?:{status?:string;person_id?:number;opportunity_id?:number;limit?:number;offset?:number;history?:boolean})=>{
     const q=new URLSearchParams();
     if(params?.status) q.set("status",params.status);
     if(params?.person_id!==undefined) q.set("person_id",String(params.person_id));
     if(params?.opportunity_id!==undefined) q.set("opportunity_id",String(params.opportunity_id));
     if(params?.limit!==undefined) q.set("limit",String(params.limit));
     if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    if(params?.history!==undefined) q.set("history",String(params.history));
     const s=q.toString()?`?${q}`:"";
     return req<import("./types").Paginated<import("./types").ResearchSession>>(`/api/v1/trees/${treeId}/research-sessions${s}`);
+  },
+  getSessionHistory: (treeId:number, params?:{status?:string;person_id?:number;limit?:number;offset?:number;page?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.status) q.set("status",params.status);
+    if(params?.person_id!==undefined) q.set("person_id",String(params.person_id));
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    if(params?.page!==undefined) q.set("page",String(params.page));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchSession & {stats: import("./types").ResearchSessionStats}>>(`/api/v1/trees/${treeId}/research-sessions/history${s}`);
   },
   getSession: (treeId:number, sessionId:number)=> req<import("./types").ResearchSessionDetail>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}`),
   createSession: (treeId:number, body:{title:string;description?:string;person_id?:number;opportunity_id?:number})=> req<import("./types").ResearchSessionDetail>(`/api/v1/trees/${treeId}/research-sessions`,{method:"POST", body:JSON.stringify(body)}),

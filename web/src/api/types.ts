@@ -177,6 +177,15 @@ export interface ResearchPlan {
 }
 
 export type ResearchSessionStatus = "PLANNED" | "ACTIVE" | "COMPLETED" | "ABANDONED";
+export interface ResearchSessionStats {
+  total_tasks:number; completed_tasks:number; open_tasks:number; in_progress_tasks:number; inconclusive_tasks:number; rejected_tasks:number;
+  total_outcomes:number; confirmed_outcomes:number; false_lead_outcomes:number; inconclusive_outcomes:number; new_lead_outcomes:number; no_evidence_outcomes:number;
+  total_evidence:number; supporting_evidence:number; contradicting_evidence:number;
+  open_followups:number; completed_followup_actions:number; skipped_followup_actions:number;
+}
+export interface ResearchSessionTimelineEvent {
+  event_type:string; timestamp:string; label:string;
+}
 export interface ResearchSession {
   id:number; tree_id:number; title:string; description?:string|null; status:ResearchSessionStatus;
   person_id?:number|null; opportunity_id?:number|null;
@@ -185,6 +194,7 @@ export interface ResearchSession {
   opportunity?: {id:number; title:string; priority?:string|null; score?:number|null; person_id:number} | null;
   tasks?: ResearchTask[];
   summary?: ResearchSessionSummary;
+  stats?: ResearchSessionStats;
 }
 export interface ResearchSessionSummary {
   total_tasks:number; open_tasks:number; in_progress_tasks:number; terminal_tasks:number; outcomes_count:number;
@@ -195,6 +205,27 @@ export interface ResearchSessionDetail {
   opportunity: {id:number; title:string; priority?:string|null; score?:number|null; person_id:number} | null;
   tasks: ResearchTask[];
   summary: ResearchSessionSummary;
+  stats: ResearchSessionStats;
+  timeline: ResearchSessionTimelineEvent[];
+}
+
+export interface ResearchSummary {
+  opportunities:{high:number;medium:number;low:number};
+  tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number};
+  outcomes:{total:number;confirmed?:number;false_lead?:number;inconclusive?:number;new_lead?:number;no_evidence?:number};
+  sources?:{total:number};
+  evidence?:{total:number;supporting:number;contradicting:number};
+  assessment?:{no_evidence:number;weak:number;mixed:number;supported:number;strongly_supported:number};
+  evidence_gaps?:{critical:number;warning:number;info:number};
+  research_followups?:{high:number;medium:number;low:number};
+  followup_actions?:{open:number;completed:number;skipped:number};
+  sessions?:{total:number;active:number;planned:number;completed:number;abandoned:number};
+  research_activity?:{
+    tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number;total:number};
+    outcomes:{total:number;confirmed:number;false_lead:number;inconclusive:number;new_lead:number;no_evidence:number};
+    evidence:{total:number;supporting:number;contradicting:number};
+    followups:{open:number;completed:number;skipped:number;total:number};
+  };
 }
 
 export interface ApiErrorBody { error:{code:string; message:string} }

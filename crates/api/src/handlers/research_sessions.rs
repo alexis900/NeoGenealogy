@@ -18,6 +18,17 @@ pub struct SessionListParams {
     pub opportunity_id: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+    pub history: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub struct SessionHistoryParams {
+    pub status: Option<String>,
+    pub person_id: Option<i64>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+    pub page: Option<i64>,
+    pub tree_id: Option<i64>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -54,11 +65,35 @@ fn validate_session_status(s: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn validate_history_status(s: &str) -> Result<(), ApiError> {
+    let allowed = ["COMPLETED", "ABANDONED"];
+    if !allowed.contains(&s) {
+        return Err(ApiError::bad_request(
+            "INVALID_SESSION_STATUS",
+            format!("history status must be one of {}", allowed.join(",")),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn list_sessions(
     State(state): State<AppState>,
     Path(tree_id): Path<i64>,
     Query(params): Query<SessionListParams>,
 ) -> Result<Json<Paginated<serde_json::Value>>, ApiError> {
+    // Support history via query param ?history=true as alternative
+    if params.history.unwrap_or(false) {
+        // delegate to history logic with same params
+        let hist_params = SessionHistoryParams {
+            status: params.status.clone(),
+            person_id: params.person_id,
+            limit: params.limit,
+            offset: params.offset,
+            page: None,
+            tree_id: Some(tree_id),
+        };
+        return list_sessions_history(State(state), Path(tree_id), Query(hist_params)).await;
+    }
     if tree_id <= 0 {
         return Err(ApiError::bad_request(
             "INVALID_TREE_ID",
@@ -106,6 +141,153 @@ pub async fn list_sessions(
                 "updated_at": r.updated_at,
                 "started_at": r.started_at,
                 "completed_at": r.completed_at
+            })
+        })
+        .collect();
+    Ok(Json(Paginated {
+        items,
+        pagination: PaginationMeta {
+            limit,
+            offset,
+            total,
+        },
+    }))
+}
+
+pub async fn list_sessions_history(
+    State(state): State<AppState>,
+    Path(tree_id): Path<i64>,
+    Query(params): Query<SessionHistoryParams>,
+) -> Result<Json<Paginated<serde_json::Value>>, ApiError> {
+    if tree_id <= 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_TREE_ID",
+            "tree_id must be >0",
+        ));
+    }
+    state.storage.get_tree(tree_id).await?.ok_or_else(|| {
+        ApiError::not_found("TREE_NOT_FOUND", format!("Tree {tree_id} was not found"))
+    })?;
+    if let Some(ref s) = params.status {
+        validate_history_status(&s.to_uppercase())?;
+    }
+    let limit = params.limit.unwrap_or(50);
+    let mut offset = params.offset.unwrap_or(0);
+    if let Some(page) = params.page {
+        if page <= 0 {
+            return Err(ApiError::bad_request("INVALID_PAGE", "page must be >=1"));
+        }
+        offset = (page - 1) * limit;
+    }
+    if !(0..=100).contains(&limit) {
+        return Err(ApiError::bad_request("INVALID_LIMIT", "limit 0..100"));
+    }
+    if offset < 0 {
+        return Err(ApiError::bad_request("INVALID_OFFSET", "offset >=0"));
+    }
+    let status = params.status.as_deref().map(|s| s.to_uppercase());
+    let (rows, total) = state
+        .storage
+        .list_research_sessions_history(tree_id, status.as_deref(), params.person_id, limit, offset)
+        .await?;
+    // batch stats to avoid N+1
+    let sids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let stats_map = state
+        .storage
+        .get_sessions_stats(&sids)
+        .await
+        .unwrap_or_default();
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            let stats = stats_map.get(&r.id).cloned().unwrap_or_default();
+            serde_json::json!({
+                "id": r.id,
+                "tree_id": r.tree_id,
+                "title": r.title,
+                "description": r.description,
+                "status": r.status,
+                "person_id": r.person_id,
+                "opportunity_id": r.opportunity_id,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "started_at": r.started_at,
+                "completed_at": r.completed_at,
+                "stats": stats
+            })
+        })
+        .collect();
+    Ok(Json(Paginated {
+        items,
+        pagination: PaginationMeta {
+            limit,
+            offset,
+            total,
+        },
+    }))
+}
+
+pub async fn list_sessions_history_generic(
+    State(state): State<AppState>,
+    Query(params): Query<SessionHistoryParams>,
+) -> Result<Json<Paginated<serde_json::Value>>, ApiError> {
+    let tree_id = params
+        .tree_id
+        .ok_or_else(|| ApiError::bad_request("TREE_REQUIRED", "tree_id query param required"))?;
+    if tree_id <= 0 {
+        return Err(ApiError::bad_request(
+            "INVALID_TREE_ID",
+            "tree_id must be >0",
+        ));
+    }
+    state.storage.get_tree(tree_id).await?.ok_or_else(|| {
+        ApiError::not_found("TREE_NOT_FOUND", format!("Tree {tree_id} was not found"))
+    })?;
+    if let Some(ref s) = params.status {
+        validate_history_status(&s.to_uppercase())?;
+    }
+    let limit = params.limit.unwrap_or(50);
+    let mut offset = params.offset.unwrap_or(0);
+    if let Some(page) = params.page {
+        if page <= 0 {
+            return Err(ApiError::bad_request("INVALID_PAGE", "page must be >=1"));
+        }
+        offset = (page - 1) * limit;
+    }
+    if !(0..=100).contains(&limit) {
+        return Err(ApiError::bad_request("INVALID_LIMIT", "limit 0..100"));
+    }
+    if offset < 0 {
+        return Err(ApiError::bad_request("INVALID_OFFSET", "offset >=0"));
+    }
+    let status = params.status.as_deref().map(|s| s.to_uppercase());
+    let (rows, total) = state
+        .storage
+        .list_research_sessions_history(tree_id, status.as_deref(), params.person_id, limit, offset)
+        .await?;
+    let sids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let stats_map = state
+        .storage
+        .get_sessions_stats(&sids)
+        .await
+        .unwrap_or_default();
+    let items: Vec<serde_json::Value> = rows
+        .into_iter()
+        .map(|r| {
+            let stats = stats_map.get(&r.id).cloned().unwrap_or_default();
+            serde_json::json!({
+                "id": r.id,
+                "tree_id": r.tree_id,
+                "title": r.title,
+                "description": r.description,
+                "status": r.status,
+                "person_id": r.person_id,
+                "opportunity_id": r.opportunity_id,
+                "created_at": r.created_at,
+                "updated_at": r.updated_at,
+                "started_at": r.started_at,
+                "completed_at": r.completed_at,
+                "stats": stats
             })
         })
         .collect();

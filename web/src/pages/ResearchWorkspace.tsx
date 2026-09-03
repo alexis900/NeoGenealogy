@@ -79,7 +79,58 @@ export default function ResearchWorkspace(){
         <Link to={`/trees/${id}/research/sessions/${currentSession.session.id}`} className="text-xs text-blue-600 underline">Continue</Link>
       </div>}
       <Link to={`/trees/${id}/research/sessions`} className="text-sm text-blue-600 underline mt-2 inline-block">View Sessions →</Link>
+      <Link to={`/trees/${id}/research/sessions/history`} className="text-sm text-blue-600 underline mt-2 ml-3 inline-block">View History →</Link>
     </div>
+
+    {/* Research Activity - Phase 5.3 */}
+    {summary && summary.sessions && (
+      <div className="border rounded p-4 bg-white">
+        <h2 className="font-semibold">Research Activity</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3 text-sm">
+          <div>
+            <div className="font-semibold text-xs text-gray-600">Sessions</div>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <div>Active <strong>{summary.sessions.active}</strong></div>
+              <div>Planned <strong>{summary.sessions.planned}</strong></div>
+              <div>Completed <strong>{summary.sessions.completed}</strong></div>
+              <div>Abandoned <strong>{summary.sessions.abandoned}</strong></div>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-xs text-gray-600">Tasks</div>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <div>Open <strong>{summary.research_activity?.tasks?.open ?? summary.tasks.open}</strong></div>
+              <div>In Progress <strong>{summary.research_activity?.tasks?.in_progress ?? summary.tasks.in_progress}</strong></div>
+              <div>Resolved <strong>{summary.research_activity?.tasks?.resolved ?? summary.tasks.resolved}</strong></div>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-xs text-gray-600">Outcomes</div>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <div>Confirmed <strong>{summary.research_activity?.outcomes?.confirmed ?? 0}</strong></div>
+              <div>False leads <strong>{summary.research_activity?.outcomes?.false_lead ?? 0}</strong></div>
+              <div>Inconclusive <strong>{summary.research_activity?.outcomes?.inconclusive ?? 0}</strong></div>
+              <div>New leads <strong>{summary.research_activity?.outcomes?.new_lead ?? 0}</strong></div>
+              <div>No evidence <strong>{summary.research_activity?.outcomes?.no_evidence ?? 0}</strong></div>
+            </div>
+          </div>
+          <div>
+            <div className="font-semibold text-xs text-gray-600">Evidence</div>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <div>Total <strong>{summary.research_activity?.evidence?.total ?? summary.evidence?.total ?? 0}</strong></div>
+              <div>Supporting <strong>{summary.research_activity?.evidence?.supporting ?? summary.evidence?.supporting ?? 0}</strong></div>
+              <div>Contradicting <strong>{summary.research_activity?.evidence?.contradicting ?? summary.evidence?.contradicting ?? 0}</strong></div>
+            </div>
+            <div className="font-semibold text-xs text-gray-600 mt-3">Follow-ups</div>
+            <div className="mt-1 space-y-0.5 text-xs">
+              <div>Open actions <strong>{summary.research_activity?.followups?.open ?? summary.followup_actions?.open ?? 0}</strong></div>
+              <div>Completed actions <strong>{summary.research_activity?.followups?.completed ?? summary.followup_actions?.completed ?? 0}</strong></div>
+              <div>Skipped actions <strong>{summary.research_activity?.followups?.skipped ?? summary.followup_actions?.skipped ?? 0}</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* What should I research next? - Planning preview */}
     <div className="border rounded p-4 bg-white">

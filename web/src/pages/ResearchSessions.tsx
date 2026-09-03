@@ -39,6 +39,10 @@ export default function ResearchSessions(){
   return <div className="space-y-4">
     <h1 className="text-2xl font-bold">Research Sessions</h1>
     <p className="text-sm text-gray-600">Investigations you are working on — planned, active, completed or abandoned.</p>
+    <div className="flex gap-2 text-sm border-b pb-2">
+      <span className="px-3 py-1 bg-gray-800 text-white rounded">Active &amp; Planned</span>
+      <Link to={`/trees/${id}/research/sessions/history`} className="px-3 py-1 border rounded hover:bg-gray-50">History</Link>
+    </div>
     <div className="flex gap-2 flex-wrap items-end bg-gray-50 border rounded p-3">
       <div>
         <label className="text-xs text-gray-600 block">Status</label>

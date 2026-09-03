@@ -8,5 +8,5 @@ test("Layout shows Research nav with sublinks", async () => {
   expect(screen.getByText("Overview")).toBeInTheDocument();
   expect(screen.getByText("Opportunities")).toBeInTheDocument();
   expect(screen.getByText("Tasks")).toBeInTheDocument();
-  expect(screen.getByText("History")).toBeInTheDocument();
+  expect(screen.getAllByText("History").length).toBeGreaterThanOrEqual(2);
 });
