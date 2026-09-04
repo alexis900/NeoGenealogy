@@ -377,11 +377,21 @@ export default function ResearchTaskDetail(){
           {(() => {
             const sel = extProviders.find((p:any)=>p.name===extProvider);
             if(!sel) return null;
-            if(sel.name==="familysearch" && !sel.configured){
-              return <div className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">FamilySearch is not configured. Set <code>NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID</code> or <code>NEOGENEALOGY_FAMILYSEARCH_ACCESS_TOKEN</code>. See <code>docs/FAMILYSEARCH.md</code>.</div>
-            }
-            if(sel.name==="familysearch" && sel.configured){
-              return <div className="text-xs text-emerald-700 mt-1">FamilySearch adapter ready — searches FamilySearch Family Tree (via <code>/platform/tree/search</code>).</div>
+            if(sel.name==="familysearch"){
+              if(sel.connected){
+                return <div className="text-xs text-emerald-700 mt-1 bg-emerald-50 border border-emerald-200 rounded px-2 py-1">✅ Conectado con FamilySearch — login interactivo activo. <Link to="/familysearch" className="underline">Búsqueda global sin árbol</Link></div>
+              }
+              if(!sel.configured){
+                return <div className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1 space-y-1">
+                  <div>FamilySearch is not configured. Set <code>NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID</code> o conecta interactivamente.</div>
+                  <button onClick={async()=>{ try{ const r:any=await (api as any).authorizeFamilySearch(); window.location.href=r.authorization_url; }catch(e:any){ setErr(e.message) } }} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Conectar con FamilySearch</button>
+                  <Link to="/familysearch" className="ml-2 text-blue-600 underline">Búsqueda global</Link>
+                </div>
+              }
+              return <div className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1 space-y-1">
+                <div>FamilySearch connection required — haz clic para conectar.</div>
+                <button onClick={async()=>{ try{ const r:any=await (api as any).authorizeFamilySearch(); window.location.href=r.authorization_url; }catch(e:any){ setErr(e.message) } }} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Conectar con FamilySearch</button>
+              </div>
             }
             return null;
           })()}

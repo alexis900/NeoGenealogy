@@ -64,6 +64,11 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/research-results/{result_id}": { "get": { "summary": "Get research result (generic)" } },
             "/api/v1/research-providers": { "get": { "summary": "List research providers", "description": "Returns [{name, display_name, configured, enabled, status, requires_auth}]. Mock always configured. FamilySearch configured when NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID or ACCESS_TOKEN is set. See docs/FAMILYSEARCH.md" } },
             "/api/v1/trees/{tree_id}/research-providers": { "get": { "summary": "List research providers for tree", "description": "Tree-scoped alias for /research-providers" } },
+            "/api/v1/auth/familysearch/authorize": { "get": { "summary": "Get FamilySearch authorization URL", "description": "Returns {authorization_url, state}. Redirect user to authorization_url (FamilySearch login, may show Google). Requires NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID and pre-registered redirect_uri. See docs/FAMILYSEARCH.md" } },
+            "/api/v1/auth/familysearch/callback": { "get": { "summary": "FamilySearch OAuth callback", "description": "Handles redirect from FamilySearch with code & state, exchanges for token, stores it, redirects to frontend. Query params: code, state, error. See docs/FAMILYSEARCH.md" } },
+            "/api/v1/auth/familysearch/status": { "get": { "summary": "FamilySearch connection status", "description": "Returns {configured, enabled, connected, status, expires_at, requires_auth, redirect_uri}. Connected true when stored token valid or env token present." } },
+            "/api/v1/auth/familysearch/disconnect": { "post": { "summary": "Disconnect FamilySearch", "description": "Deletes stored token" } },
+            "/api/v1/familysearch/search": { "get": { "summary": "FamilySearch global search without tree", "description": "Query params: q or query or givenName/surname/birthLikeDate/birthLikePlace. Uses stored OAuth token or env token or unauthenticated_session. Returns {provider, query, results[], result_count}. No ResearchQuery persistence. See docs/FAMILYSEARCH.md" } },
         },
         "components": {
             "schemas": {
@@ -385,8 +390,9 @@ pub async fn get_openapi() -> Json<Value> {
                         "display_name": {"type":"string"},
                         "configured": {"type":"boolean"},
                         "enabled": {"type":"boolean"},
-                        "status": {"type":"string", "enum":["configured","not_configured","disabled"]},
-                        "requires_auth": {"type":"boolean"}
+                        "status": {"type":"string", "enum":["configured","not_configured","disabled","connected"]},
+                        "requires_auth": {"type":"boolean"},
+                        "connected": {"type":"boolean"}
                     }
                 },
                 "ExternalResearchSummary": {

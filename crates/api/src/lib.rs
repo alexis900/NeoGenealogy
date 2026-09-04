@@ -266,6 +266,26 @@ pub fn create_router(state: AppState) -> Router {
             "/trees/:tree_id/research-providers",
             get(handlers::external_research::list_providers_tree),
         )
+        .route(
+            "/auth/familysearch/authorize",
+            get(handlers::familysearch_auth::authorize),
+        )
+        .route(
+            "/auth/familysearch/callback",
+            get(handlers::familysearch_auth::callback),
+        )
+        .route(
+            "/auth/familysearch/status",
+            get(handlers::familysearch_auth::status),
+        )
+        .route(
+            "/auth/familysearch/disconnect",
+            post(handlers::familysearch_auth::disconnect),
+        )
+        .route(
+            "/familysearch/search",
+            get(handlers::familysearch_auth::familysearch_global_search),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 

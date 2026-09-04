@@ -99,6 +99,27 @@ FamilySearch application configuration ≠ FamilySearch user authorization ≠ G
 
 y persistencia de tokens aislada sin exposición via endpoints normales.
 
+### 5.1 OAuth interactivo — Conectar con FamilySearch (incluye inicio con Google)
+
+Desde 6.1.1 NeoGenealogy expone login interactivo **sin multi-user** (single-tenant, token global `familysearch_connections id=1`):
+
+- `GET /api/v1/auth/familysearch/authorize` → genera `state` (uuid v4, 10 min TTL en `familysearch_oauth_states`), persiste y devuelve `{authorization_url, state}`. `authorization_url = https://ident.familysearch.org/cis-web/oauth2/v3/authorization?response_type=code&client_id=&redirect_uri=&state=&scope=openid`. `redirect_uri` por defecto `http://127.0.0.1:3000/api/v1/auth/familysearch/callback` (configurable `NEOGENEALOGY_FAMILYSEARCH_REDIRECT_URI`, debe estar pre-registrado en el portal FamilySearch).
+- Frontend `Conectar con FamilySearch` (`web/src/pages/ResearchTaskDetail.tsx:380`, `web/src/pages/FamilySearchGlobalSearch.tsx`) hace `window.location.href = authorization_url`. El usuario ve la **página de login de FamilySearch**, que puede ofrecer **"Sign in with Google"** — es UI de FamilySearch, no de NeoGenealogy. Tras login, FamilySearch redirige a `redirect_uri?code=&state=`.
+- `GET /api/v1/auth/familysearch/callback?code=&state=&error=` valida `state` (consume y expira), intercambia `code` por token vía `POST /cis-web/oauth2/v3/token {grant_type=authorization_code, client_id, code, redirect_uri}` (`familysearch.rs:fetch_token_authorization_code`), guarda `access_token` + `expires_at` en `familysearch_connections` y redirige a `NEOGENEALOGY_FAMILYSEARCH_FRONTEND_REDIRECT` (`http://localhost:5173?fanitysearch=connected`). Errores `error=access_denied` también redirigen con `?familysearch_error=`.
+- `GET /api/v1/auth/familysearch/status` → `{configured, enabled, connected, status: connected|configured|not_configured|disabled, expires_at, requires_auth, redirect_uri}`. `connected` true si hay token válido en BD o `NEOGENEALOGY_FAMILYSEARCH_ACCESS_TOKEN`. `list_providers` también refleja `connected`.
+- `POST /api/v1/auth/familysearch/disconnect` → `DELETE FROM familysearch_connections WHERE id=1`.
+- Tokens nunca en `ResearchQuery/Result/Task/Evidence/Source/Citation/Outcome`, nunca en JSON/logs, solo `tracing::info` sin secreto. `effective_familysearch_config()` en `crates/api/src/handlers/external_research.rs:800` y `familysearch_auth.rs` prioriza: `stored token (si válido) > env ACCESS_TOKEN > unauthenticated_session`.
+
+No se crea sistema multi-user; token es global para la instancia. Para multi-user futuro se extendería `familysearch_connections` con `user_id`.
+
+### 5.2 Búsqueda global sin árbol
+
+Para no depender de un único árbol (`crates/storage/migrations/007_external_research.sql` exige `tree_id`), se añade endpoint global:
+
+- `GET /api/v1/familysearch/search?q=&givenName=&surname=&birthLikeDate=&birthLikePlace=` (`familysearch_auth.rs:familysearch_global_search`). Construye `free_q` o `q.givenName` etc., traduce con `translate_query` o usa explícitos, llama `FamilySearchProvider::search` con `effective_config` y devuelve `{provider, query, results[], result_count, disclaimer}` sin persistir `research_queries/executions`. No requiere `tree_id` ni `task_id`.
+- UI `GET /familysearch` (`web/src/pages/FamilySearchGlobalSearch.tsx`) permite `q` libre o campos separados, muestra estado de conexión, botón Conectar/Desconectar, y resultados con `FamilySearch Result ≠ Evidence`. Accesible desde `Layout` (`web/src/components/Layout.tsx`) sin seleccionar árbol.
+- El flujo clásico `Árbol → Task → Query → Execution → Result` sigue intacto; global es adicional para búsquedas rápidas.
+
 ## 6. Entorno de desarrollo (oficial)
 
 FamilySearch documenta 3 entornos:

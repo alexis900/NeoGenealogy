@@ -15,6 +15,8 @@ pub struct FamilySearchConfig {
     pub ident_base_url: String,
     pub access_token: Option<String>,
     pub timeout_ms: u64,
+    pub redirect_uri: String,
+    pub frontend_redirect: String,
 }
 
 impl Default for FamilySearchConfig {
@@ -25,6 +27,8 @@ impl Default for FamilySearchConfig {
             ident_base_url: "https://ident.familysearch.org".to_string(),
             access_token: None,
             timeout_ms: 10_000,
+            redirect_uri: "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string(),
+            frontend_redirect: "http://localhost:5173".to_string(),
         }
     }
 }
@@ -49,17 +53,50 @@ impl FamilySearchConfig {
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(10_000);
+        let redirect_uri = std::env::var("NEOGENEALOGY_FAMILYSEARCH_REDIRECT_URI")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| {
+                "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string()
+            });
+        let frontend_redirect = std::env::var("NEOGENEALOGY_FAMILYSEARCH_FRONTEND_REDIRECT")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "http://localhost:5173".to_string());
         Self {
             client_id,
             base_url,
             ident_base_url,
             access_token,
             timeout_ms,
+            redirect_uri,
+            frontend_redirect,
         }
     }
 
     pub fn is_configured(&self) -> bool {
         self.client_id.is_some() || self.access_token.is_some()
+    }
+
+    pub fn authorization_url(&self, state: &str) -> Result<String, ProviderError> {
+        let client_id = self.client_id.as_ref().ok_or_else(|| {
+            ProviderError::new(
+                ProviderErrorCode::AUTH_REQUIRED,
+                "FamilySearch is not configured. Set NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID",
+            )
+        })?;
+        let mut url = url::Url::parse(&format!(
+            "{}/cis-web/oauth2/v3/authorization",
+            self.ident_base_url.trim_end_matches('/')
+        ))
+        .map_err(|_| ProviderError::new(ProviderErrorCode::UNKNOWN, "invalid ident base URL"))?;
+        url.query_pairs_mut()
+            .append_pair("response_type", "code")
+            .append_pair("client_id", client_id)
+            .append_pair("redirect_uri", &self.redirect_uri)
+            .append_pair("state", state)
+            .append_pair("scope", "openid");
+        Ok(url.to_string())
     }
 
     /// Returns true if provider should be considered available (always true in registry,
@@ -461,6 +498,13 @@ fn extract_birth(person: &serde_json::Value) -> (Option<String>, Option<String>)
 // HTTP Executor trait (for testability)
 // ---------------------------------------------------------------------------
 
+#[derive(Debug, Clone)]
+pub struct FamilySearchToken {
+    pub access_token: String,
+    pub expires_in: Option<u64>,
+    pub token_type: Option<String>,
+}
+
 #[async_trait::async_trait]
 pub trait FamilySearchHttpExecutor: Send + Sync {
     async fn fetch_search(
@@ -476,6 +520,15 @@ pub trait FamilySearchHttpExecutor: Send + Sync {
         client_id: &str,
         timeout_ms: u64,
     ) -> Result<String, ProviderError>;
+
+    async fn fetch_token_authorization_code(
+        &self,
+        ident_base_url: &str,
+        client_id: &str,
+        redirect_uri: &str,
+        code: &str,
+        timeout_ms: u64,
+    ) -> Result<FamilySearchToken, ProviderError>;
 }
 
 pub struct ReqwestExecutor {
@@ -594,6 +647,78 @@ impl FamilySearchHttpExecutor for ReqwestExecutor {
                 )
             })?;
         Ok(token.to_string())
+    }
+
+    async fn fetch_token_authorization_code(
+        &self,
+        ident_base_url: &str,
+        client_id: &str,
+        redirect_uri: &str,
+        code: &str,
+        _timeout_ms: u64,
+    ) -> Result<FamilySearchToken, ProviderError> {
+        let url = format!(
+            "{}/cis-web/oauth2/v3/token",
+            ident_base_url.trim_end_matches('/')
+        );
+        let params = [
+            ("grant_type", "authorization_code"),
+            ("client_id", client_id),
+            ("code", code),
+            ("redirect_uri", redirect_uri),
+        ];
+        let resp = self
+            .client
+            .post(&url)
+            .form(&params)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| map_reqwest_error(&e))?;
+
+        let status = resp.status().as_u16();
+        if status == 401 || status == 403 {
+            return Err(ProviderError::new(
+                ProviderErrorCode::AUTH_REQUIRED,
+                "FamilySearch authentication required",
+            ));
+        }
+        if status == 429 {
+            return Err(ProviderError::new(
+                ProviderErrorCode::RATE_LIMITED,
+                "FamilySearch rate limited",
+            ));
+        }
+        if status >= 400 {
+            let code = map_http_status(status);
+            return Err(ProviderError::new(
+                code,
+                "failed to obtain FamilySearch token",
+            ));
+        }
+        let json = resp.json::<serde_json::Value>().await.map_err(|_| {
+            ProviderError::new(ProviderErrorCode::UNKNOWN, "invalid token response")
+        })?;
+        let token = json
+            .get("access_token")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ProviderError::new(
+                    ProviderErrorCode::AUTH_REQUIRED,
+                    "FamilySearch authentication required",
+                )
+            })?
+            .to_string();
+        let expires_in = json.get("expires_in").and_then(|v| v.as_u64());
+        let token_type = json
+            .get("token_type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        Ok(FamilySearchToken {
+            access_token: token,
+            expires_in,
+            token_type,
+        })
     }
 }
 
@@ -776,6 +901,23 @@ mod tests {
                 Err(e) => Err(ProviderError::new(e.code.clone(), e.message.clone())),
             }
         }
+        async fn fetch_token_authorization_code(
+            &self,
+            _ident_base_url: &str,
+            _client_id: &str,
+            _redirect_uri: &str,
+            _code: &str,
+            _timeout_ms: u64,
+        ) -> Result<FamilySearchToken, ProviderError> {
+            match &self.token_response {
+                Ok(s) => Ok(FamilySearchToken {
+                    access_token: s.clone(),
+                    expires_in: Some(3600),
+                    token_type: Some("Bearer".to_string()),
+                }),
+                Err(e) => Err(ProviderError::new(e.code.clone(), e.message.clone())),
+            }
+        }
     }
 
     fn configured_provider(
@@ -787,6 +929,8 @@ mod tests {
             ident_base_url: "https://ident.familysearch.org".to_string(),
             access_token: Some("test-token".to_string()),
             timeout_ms: 5000,
+            redirect_uri: "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string(),
+            frontend_redirect: "http://localhost:5173".to_string(),
         };
         let exec = MockExecutor {
             search_response,
@@ -804,6 +948,8 @@ mod tests {
             ident_base_url: "https://ident.familysearch.org".to_string(),
             access_token: None,
             timeout_ms: 10000,
+            redirect_uri: "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string(),
+            frontend_redirect: "http://localhost:5173".to_string(),
         };
         assert!(!cfg.is_configured());
     }
@@ -865,6 +1011,8 @@ mod tests {
             ident_base_url: "https://ident.familysearch.org".to_string(),
             access_token: None,
             timeout_ms: 5000,
+            redirect_uri: "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string(),
+            frontend_redirect: "http://localhost:5173".to_string(),
         };
         let exec = MockExecutor {
             search_response: Ok(serde_json::json!({"entries":[]})),
@@ -929,6 +1077,8 @@ mod tests {
             ident_base_url: "https://ident.familysearch.org".to_string(),
             access_token: Some("bad-token".to_string()),
             timeout_ms: 5000,
+            redirect_uri: "http://127.0.0.1:3000/api/v1/auth/familysearch/callback".to_string(),
+            frontend_redirect: "http://localhost:5173".to_string(),
         };
         let exec = MockExecutor {
             search_response: Err(ProviderError::new(ProviderErrorCode::AUTH_REQUIRED, "auth")),

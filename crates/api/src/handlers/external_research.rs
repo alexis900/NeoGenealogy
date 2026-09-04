@@ -141,6 +141,28 @@ fn validate_provider(name: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+async fn effective_familysearch_config(
+    storage: &neogenealogy_storage::Storage,
+) -> neogenealogy_storage::familysearch::FamilySearchConfig {
+    let mut cfg = neogenealogy_storage::familysearch::FamilySearchConfig::from_env();
+    if let Ok(Some(row)) = storage.get_familysearch_token().await {
+        let valid = if let Some(exp) = &row.expires_at {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(exp) {
+                dt.with_timezone(&chrono::Utc) > chrono::Utc::now()
+            } else {
+                true
+            }
+        } else {
+            true
+        };
+        if valid {
+            cfg.access_token = Some(row.access_token);
+        }
+    }
+    cfg
+}
+
+#[allow(dead_code)]
 fn familysearch_status() -> serde_json::Value {
     let cfg = neogenealogy_storage::familysearch::FamilySearchConfig::from_env();
     let configured = cfg.is_configured() && cfg.enabled();
@@ -161,6 +183,47 @@ fn familysearch_status() -> serde_json::Value {
     })
 }
 
+async fn familysearch_status_with_storage(
+    storage: &neogenealogy_storage::Storage,
+) -> serde_json::Value {
+    let cfg = effective_familysearch_config(storage).await;
+    let stored = storage.get_familysearch_token().await.ok().flatten();
+    let connected = if let Some(row) = stored {
+        if let Some(exp) = &row.expires_at {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(exp) {
+                dt.with_timezone(&chrono::Utc) > chrono::Utc::now()
+            } else {
+                true
+            }
+        } else {
+            true
+        }
+    } else {
+        false
+    };
+    // Use effective config is_configured
+    let configured = cfg.is_configured() && cfg.enabled();
+    let status = if !cfg.enabled() {
+        "disabled"
+    } else if connected || cfg.access_token.is_some() {
+        "connected"
+    } else if configured {
+        "configured"
+    } else {
+        "not_configured"
+    };
+    serde_json::json!({
+        "name": "familysearch",
+        "display_name": "FamilySearch",
+        "configured": configured,
+        "enabled": cfg.enabled(),
+        "status": status,
+        "requires_auth": !connected && cfg.access_token.is_none(),
+        "connected": connected || cfg.access_token.is_some()
+    })
+}
+
+#[allow(dead_code)]
 fn providers_json() -> serde_json::Value {
     let fs = familysearch_status();
     let mock = serde_json::json!({
@@ -174,10 +237,23 @@ fn providers_json() -> serde_json::Value {
     serde_json::json!({ "providers": [mock, fs] })
 }
 
+async fn providers_json_with_storage(storage: &neogenealogy_storage::Storage) -> serde_json::Value {
+    let fs = familysearch_status_with_storage(storage).await;
+    let mock = serde_json::json!({
+        "name": "mock",
+        "display_name": "Mock",
+        "configured": true,
+        "enabled": true,
+        "status": "configured",
+        "requires_auth": false
+    });
+    serde_json::json!({ "providers": [mock, fs] })
+}
+
 pub async fn list_providers_generic(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    Ok(Json(providers_json()))
+    Ok(Json(providers_json_with_storage(&state.storage).await))
 }
 
 pub async fn list_providers_tree(
@@ -190,7 +266,7 @@ pub async fn list_providers_tree(
     state.storage.get_tree(tree_id).await?.ok_or_else(|| {
         ApiError::not_found("TREE_NOT_FOUND", format!("Tree {tree_id} not found"))
     })?;
-    Ok(Json(providers_json()))
+    Ok(Json(providers_json_with_storage(&state.storage).await))
 }
 
 // POST /api/v1/research-tasks/:task_id/research-queries
@@ -722,8 +798,13 @@ async fn execute_query(
     let query_id = query.id;
     let provider_name = query.provider.clone();
     let query_text = query.query.clone();
-    // Validate provider exists
-    let registry = neogenealogy_storage::external_research::ResearchProviderRegistry::new();
+    // Validate provider exists - use effective config for familysearch to include stored token
+    let registry = if provider_name.to_lowercase() == "familysearch" {
+        let cfg = effective_familysearch_config(&state.storage).await;
+        neogenealogy_storage::external_research::ResearchProviderRegistry::new_with_familysearch_config(cfg)
+    } else {
+        neogenealogy_storage::external_research::ResearchProviderRegistry::new()
+    };
     let provider = registry.get(&provider_name).ok_or_else(|| {
         ApiError::bad_request(
             "INVALID_PROVIDER",

@@ -5,6 +5,7 @@ pub mod coverage;
 pub mod evidence;
 pub mod external_research;
 pub mod families;
+pub mod familysearch_auth;
 pub mod findings;
 pub mod followup_actions;
 pub mod health;

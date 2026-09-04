@@ -10,6 +10,7 @@ export default function Layout(){
         {treeId ? <>
           {link(`${base}`, "Dashboard")}
           {link(`${base}/research`, "Research")}
+          {link(`/familysearch`, "FamilySearch (Global)")}
           <div className="pl-3 space-y-1 text-sm">
             {link(`${base}/research`, "Overview")}
             {link(`${base}/research/planning`, "Planning")}
@@ -30,6 +31,7 @@ export default function Layout(){
         </> : <>
           {link("/", "Home")}
           {link("/trees", "Trees")}
+          {link("/familysearch", "FamilySearch (Global)")}
         </>}
       </aside>
       <main className="flex-1 p-6 bg-white"><Outlet/></main>

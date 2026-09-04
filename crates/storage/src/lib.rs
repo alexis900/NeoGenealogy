@@ -4,6 +4,7 @@ pub mod db;
 pub mod error;
 pub mod external_research;
 pub mod familysearch;
+pub mod familysearch_auth;
 pub mod import;
 pub mod models;
 pub mod planning;

@@ -254,4 +254,17 @@ export const api = {
   getResearchResult: (treeId:number, resultId:number)=> req<import("./types").ResearchResult>(`/api/v1/trees/${treeId}/research-results/${resultId}`),
   getResearchProviders: (treeId:number)=> req<{providers: import("./types").ResearchProviderInfo[]}>(`/api/v1/trees/${treeId}/research-providers`),
   getResearchProvidersGeneric: ()=> req<{providers: import("./types").ResearchProviderInfo[]}>(`/api/v1/research-providers`),
+  getFamilySearchAuthStatus: ()=> req<{configured:boolean; enabled:boolean; connected:boolean; status:string; expires_at?:string; requires_auth:boolean; redirect_uri:string}>(`/api/v1/auth/familysearch/status`),
+  authorizeFamilySearch: ()=> req<{authorization_url:string; state:string}>(`/api/v1/auth/familysearch/authorize`),
+  disconnectFamilySearch: ()=> req<void>(`/api/v1/auth/familysearch/disconnect`,{method:"POST"}),
+  familySearchGlobalSearch: (params:{q?:string; givenName?:string; surname?:string; birthLikeDate?:string; birthLikePlace?:string})=>{
+    const qp=new URLSearchParams();
+    if(params.q) qp.set("q", params.q);
+    if(params.givenName) qp.set("givenName", params.givenName);
+    if(params.surname) qp.set("surname", params.surname);
+    if(params.birthLikeDate) qp.set("birthLikeDate", params.birthLikeDate);
+    if(params.birthLikePlace) qp.set("birthLikePlace", params.birthLikePlace);
+    const s=qp.toString()?`?${qp}`:"";
+    return req<{provider:string; query:string; results: import("./types").ResearchResult[]; result_count:number}>(`/api/v1/familysearch/search${s}`);
+  },
 };
