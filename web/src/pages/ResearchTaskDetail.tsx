@@ -49,6 +49,8 @@ export default function ResearchTaskDetail(){
   // External Research
   const [extQueries,setExtQueries]=useState<any[]>([]);
   const [extProvider,setExtProvider]=useState("mock");
+  const [extProviders,setExtProviders]=useState<any[]>([]);
+  const [extProvidersLoading,setExtProvidersLoading]=useState(true);
   const [extQueryText,setExtQueryText]=useState("");
   const [extCreating,setExtCreating]=useState(false);
   const [extRunning,setExtRunning]=useState<{[key:number]:boolean}>({});
@@ -88,6 +90,19 @@ export default function ResearchTaskDetail(){
         const sess=await api.getSessions(tid,{limit:50});
         setSessions(sess.items);
       }catch{}
+      // Load providers
+      try{
+        setExtProvidersLoading(true);
+        const prov = await api.getResearchProviders(tid);
+        setExtProviders(prov.providers);
+        // default to first configured provider if mock not configured? mock always configured
+        const fs = prov.providers.find((p:any)=>p.name==="familysearch");
+        if(fs && fs.configured) {
+          // keep mock as default but provider list will show both
+        }
+      }catch{
+        setExtProviders([{name:"mock", display_name:"Mock", configured:true, enabled:true, status:"configured"}]);
+      } finally{ setExtProvidersLoading(false); }
       // Load external research queries
       try{
         const qres = await api.getResearchQueriesForTask(tid, id, {limit:50});
@@ -349,11 +364,27 @@ export default function ResearchTaskDetail(){
     <div className="border rounded p-4 bg-white">
       <h3 className="font-semibold">External Research</h3>
       <div className="text-xs text-gray-600 mt-1">External Research finds candidates. The researcher decides what constitutes evidence. Results are <strong>not</strong> evidence.</div>
+      <div className="text-xs text-amber-800 mt-1">FamilySearch Result ≠ Evidence — External results are candidates only. NeoGenealogy never writes to the FamilySearch Family Tree automatically.</div>
       <div className="mt-3 space-y-2">
         <label className="block"><span className="text-sm font-semibold">Provider</span>
+          {extProvidersLoading ? <div className="text-xs text-gray-500 mt-1">Loading providers…</div> :
           <select value={extProvider} onChange={e=>setExtProvider(e.target.value)} className="border rounded px-2 py-1 mt-1">
-            <option value="mock">Mock</option>
+            {extProviders.map((p:any)=>(
+              <option key={p.name} value={p.name}>{p.display_name} {p.configured ? "" : "(not configured)"}</option>
+            ))}
           </select>
+          }
+          {(() => {
+            const sel = extProviders.find((p:any)=>p.name===extProvider);
+            if(!sel) return null;
+            if(sel.name==="familysearch" && !sel.configured){
+              return <div className="text-xs text-amber-700 mt-1 bg-amber-50 border border-amber-200 rounded px-2 py-1">FamilySearch is not configured. Set <code>NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID</code> or <code>NEOGENEALOGY_FAMILYSEARCH_ACCESS_TOKEN</code>. See <code>docs/FAMILYSEARCH.md</code>.</div>
+            }
+            if(sel.name==="familysearch" && sel.configured){
+              return <div className="text-xs text-emerald-700 mt-1">FamilySearch adapter ready — searches FamilySearch Family Tree (via <code>/platform/tree/search</code>).</div>
+            }
+            return null;
+          })()}
         </label>
         <label className="block"><span className="text-sm font-semibold">Query</span>
           <input value={extQueryText} onChange={e=>setExtQueryText(e.target.value)} placeholder="Josep García baptism 1882 Sant Martí" className="w-full border rounded px-2 py-1 mt-1" />
@@ -369,7 +400,8 @@ export default function ResearchTaskDetail(){
                 <div>
                   <div className="text-sm font-medium">{q.query}</div>
                   <div className="text-xs text-gray-600">{q.provider.toUpperCase()} · {q.status} {q.latest_execution ? `· ${q.latest_execution.result_count??0} results` : ""}</div>
-                  {q.error_code && <div className="text-xs text-red-600">{q.error_code}: {q.error_message}</div>}
+                  {q.error_code && <div className="text-xs text-red-600">{q.error_code}: {q.error_message} {q.error_code==="AUTH_REQUIRED" && q.provider==="familysearch" ? <span className="ml-1">— <span className="bg-amber-100 border border-amber-200 rounded px-1">FamilySearch connection required</span> Check configuration in <code>docs/FAMILYSEARCH.md</code></span> : null}</div>}
+                  {q.latest_execution?.error_code==="AUTH_REQUIRED" && <div className="text-xs text-amber-700">FamilySearch connection required — verify <code>NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID</code>.</div>}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={()=>runExternalQuery(q.id)} disabled={!!extRunning[q.id]} className="px-2 py-1 bg-emerald-600 text-white rounded text-xs disabled:opacity-50">{extRunning[q.id]?"Running…": q.status==="COMPLETED"||q.status==="FAILED" ? "Run Again" : "Run Research"}</button>
@@ -383,11 +415,11 @@ export default function ResearchTaskDetail(){
                   {extResults[q.id].length===0 ? <div className="text-xs text-gray-500">No results — search completed successfully but nothing found.</div> :
                     extResults[q.id].map((r:any)=>(
                       <div key={r.id} className="border rounded p-3 bg-white">
-                        <div className="text-sm font-semibold">{r.title}</div>
+                        <div className="text-sm font-semibold">{r.title} {r.external_id && <span className="text-xs font-normal text-gray-500">· {r.external_id}</span>}</div>
                         {r.description && <div className="text-xs text-gray-600 mt-1">{r.description}</div>}
-                        <div className="text-xs text-gray-500 mt-1">{r.date || ""} {r.place ? `· ${r.place}` : ""} {r.record_type ? `· ${r.record_type}` : ""} · {r.provider.toUpperCase()}</div>
+                        <div className="text-xs text-gray-500 mt-1">{r.date || ""} {r.place ? `· ${r.place}` : ""} {r.record_type ? `· ${r.record_type}` : ""} · {r.provider.toUpperCase()} {r.external_id ? `· ${r.external_id}` : ""}</div>
                         <div className="text-xs mt-1"><span className="px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded">External Research Result</span> <span className="ml-2 text-amber-800">This result is not evidence.</span></div>
-                        <div className="text-xs mt-1">Possible matching record</div>
+                        <div className="text-xs mt-1">Possible matching record {r.provider==="familysearch" ? "— FamilySearch Family Tree" : ""}</div>
                         {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline mt-1 inline-block">Open external source</a>}
                         <Link to={`/trees/${tid}/research/results/${r.id}`} className="ml-2 text-xs text-blue-600 underline">Review Result</Link>
                       </div>

@@ -258,6 +258,14 @@ pub fn create_router(state: AppState) -> Router {
             "/research-results/:result_id",
             get(handlers::external_research::get_result_generic),
         )
+        .route(
+            "/research-providers",
+            get(handlers::external_research::list_providers_generic),
+        )
+        .route(
+            "/trees/:tree_id/research-providers",
+            get(handlers::external_research::list_providers_tree),
+        )
         .route("/openapi.json", get(handlers::openapi::get_openapi))
         .route("/docs", get(handlers::openapi::get_docs));
 

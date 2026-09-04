@@ -48,7 +48,7 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/research-sessions": { "get": { "summary": "List research sessions (generic)" }, "post": { "summary": "Create research session (generic, tree_id in body)" } },
             "/api/v1/research-sessions/{session_id}": { "get": { "summary": "Get research session generic" }, "patch": { "summary": "Update research session generic" }, "delete": { "summary": "Delete research session generic" } },
             "/api/v1/research-sessions/history": { "get": { "summary": "List research session history (generic, requires tree_id)", "parameters": [{"name":"tree_id"},{"name":"status"},{"name":"person_id"},{"name":"limit"},{"name":"offset"},{"name":"page"}] } },
-            "/api/v1/trees/{tree_id}/research-tasks/{task_id}/research-queries": { "get": { "summary": "List queries for task", "parameters": [{"name":"limit"},{"name":"offset"}] }, "post": { "summary": "Create research query (PENDING, provider=mock)", "description": "Payload {provider, query}. Provider must be mock." } },
+            "/api/v1/trees/{tree_id}/research-tasks/{task_id}/research-queries": { "get": { "summary": "List queries for task", "parameters": [{"name":"limit"},{"name":"offset"}] }, "post": { "summary": "Create research query (PENDING, provider=mock|familysearch)", "description": "Payload {provider, query}. Provider must be mock or familysearch. FamilySearch requires NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID or ACCESS_TOKEN; otherwise run returns AUTH_REQUIRED. See docs/FAMILYSEARCH.md" } },
             "/api/v1/trees/{tree_id}/research-queries": { "get": { "summary": "List research queries", "parameters": [{"name":"task_id"},{"name":"provider"},{"name":"status"},{"name":"limit"},{"name":"offset"}] } },
             "/api/v1/trees/{tree_id}/research-queries/{query_id}": { "get": { "summary": "Get research query with latest_execution" }, "delete": { "summary": "Delete research query (cascade executions/results)" } },
             "/api/v1/trees/{tree_id}/research-queries/{query_id}/run": { "post": { "summary": "Run research query (PENDING→RUNNING→COMPLETED/FAILED)", "description": "Synchronous execution via mock provider; creates execution and results. Rerun allowed (COMPLETED/FAILED→RUNNING creates new execution, preserves history)." } },
@@ -62,6 +62,8 @@ pub async fn get_openapi() -> Json<Value> {
             "/api/v1/research-queries/{query_id}/executions": { "get": { "summary": "List executions" } },
             "/api/v1/research-queries/{query_id}/results": { "get": { "summary": "List results (latest execution)" } },
             "/api/v1/research-results/{result_id}": { "get": { "summary": "Get research result (generic)" } },
+            "/api/v1/research-providers": { "get": { "summary": "List research providers", "description": "Returns [{name, display_name, configured, enabled, status, requires_auth}]. Mock always configured. FamilySearch configured when NEOGENEALOGY_FAMILYSEARCH_CLIENT_ID or ACCESS_TOKEN is set. See docs/FAMILYSEARCH.md" } },
+            "/api/v1/trees/{tree_id}/research-providers": { "get": { "summary": "List research providers for tree", "description": "Tree-scoped alias for /research-providers" } },
         },
         "components": {
             "schemas": {
@@ -375,7 +377,18 @@ pub async fn get_openapi() -> Json<Value> {
                         "created_at": {"type":"string"}
                     }
                 },
-                "ResearchProvider": { "type": "string", "enum": ["mock"] },
+                "ResearchProvider": { "type": "string", "enum": ["mock", "familysearch"] },
+                "ResearchProviderInfo": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type":"string", "enum":["mock","familysearch"]},
+                        "display_name": {"type":"string"},
+                        "configured": {"type":"boolean"},
+                        "enabled": {"type":"boolean"},
+                        "status": {"type":"string", "enum":["configured","not_configured","disabled"]},
+                        "requires_auth": {"type":"boolean"}
+                    }
+                },
                 "ExternalResearchSummary": {
                     "type": "object",
                     "properties": {

@@ -252,4 +252,6 @@ export const api = {
     return req<import("./types").Paginated<import("./types").ResearchResult>>(`/api/v1/trees/${treeId}/research-queries/${queryId}/results${s}`);
   },
   getResearchResult: (treeId:number, resultId:number)=> req<import("./types").ResearchResult>(`/api/v1/trees/${treeId}/research-results/${resultId}`),
+  getResearchProviders: (treeId:number)=> req<{providers: import("./types").ResearchProviderInfo[]}>(`/api/v1/trees/${treeId}/research-providers`),
+  getResearchProvidersGeneric: ()=> req<{providers: import("./types").ResearchProviderInfo[]}>(`/api/v1/research-providers`),
 };

@@ -229,6 +229,9 @@ export interface ResearchResult {
   record_type?:string|null; date?:string|null; place?:string|null;
   metadata?: unknown; position:number; created_at:string;
 }
+export interface ResearchProviderInfo {
+  name:string; display_name:string; configured:boolean; enabled:boolean; status:string; requires_auth:boolean;
+}
 
 export interface ResearchSummary {
   opportunities:{high:number;medium:number;low:number};

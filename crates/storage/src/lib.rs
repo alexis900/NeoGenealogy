@@ -3,6 +3,7 @@ pub mod case_summary;
 pub mod db;
 pub mod error;
 pub mod external_research;
+pub mod familysearch;
 pub mod import;
 pub mod models;
 pub mod planning;

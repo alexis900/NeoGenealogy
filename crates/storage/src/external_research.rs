@@ -202,6 +202,28 @@ impl ResearchProviderRegistry {
             "mock".to_string(),
             std::sync::Arc::new(MockResearchProvider) as std::sync::Arc<dyn ResearchProvider>,
         );
+        // FamilySearch provider — always registered; runtime will return AUTH_REQUIRED if not configured
+        let fs_config = crate::familysearch::FamilySearchConfig::from_env();
+        let fs_provider = crate::familysearch::FamilySearchProvider::new(fs_config);
+        m.insert(
+            "familysearch".to_string(),
+            std::sync::Arc::new(fs_provider) as std::sync::Arc<dyn ResearchProvider>,
+        );
+        Self { providers: m }
+    }
+
+    pub fn new_with_familysearch_config(config: crate::familysearch::FamilySearchConfig) -> Self {
+        let mut m: std::collections::HashMap<String, std::sync::Arc<dyn ResearchProvider>> =
+            std::collections::HashMap::new();
+        m.insert(
+            "mock".to_string(),
+            std::sync::Arc::new(MockResearchProvider) as std::sync::Arc<dyn ResearchProvider>,
+        );
+        let fs_provider = crate::familysearch::FamilySearchProvider::new(config);
+        m.insert(
+            "familysearch".to_string(),
+            std::sync::Arc::new(fs_provider) as std::sync::Arc<dyn ResearchProvider>,
+        );
         Self { providers: m }
     }
 
@@ -254,5 +276,18 @@ mod tests {
         assert!(!is_valid_external_url("data:text/html,hello"));
         assert!(!is_valid_external_url("file:///etc/passwd"));
         assert!(!is_valid_external_url("ftp://example.com"));
+    }
+
+    #[test]
+    fn registry_contains_mock_and_familysearch() {
+        let reg = ResearchProviderRegistry::new();
+        assert!(reg.get("mock").is_some());
+        assert!(reg.get("familysearch").is_some());
+        assert!(reg.get("Mock").is_some());
+        assert!(reg.get("FamilySearch").is_some());
+        let mut available = reg.available_providers();
+        available.sort();
+        assert!(available.contains(&"mock".to_string()));
+        assert!(available.contains(&"familysearch".to_string()));
     }
 }

@@ -141,6 +141,58 @@ fn validate_provider(name: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn familysearch_status() -> serde_json::Value {
+    let cfg = neogenealogy_storage::familysearch::FamilySearchConfig::from_env();
+    let configured = cfg.is_configured() && cfg.enabled();
+    let status = if !cfg.enabled() {
+        "disabled"
+    } else if configured {
+        "configured"
+    } else {
+        "not_configured"
+    };
+    serde_json::json!({
+        "name": "familysearch",
+        "display_name": "FamilySearch",
+        "configured": configured,
+        "enabled": cfg.enabled(),
+        "status": status,
+        "requires_auth": !configured
+    })
+}
+
+fn providers_json() -> serde_json::Value {
+    let fs = familysearch_status();
+    let mock = serde_json::json!({
+        "name": "mock",
+        "display_name": "Mock",
+        "configured": true,
+        "enabled": true,
+        "status": "configured",
+        "requires_auth": false
+    });
+    serde_json::json!({ "providers": [mock, fs] })
+}
+
+pub async fn list_providers_generic(
+    State(_state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(providers_json()))
+}
+
+pub async fn list_providers_tree(
+    State(state): State<AppState>,
+    Path(tree_id): Path<i64>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if tree_id <= 0 {
+        return Err(ApiError::bad_request("INVALID_ID", "tree_id must be >0"));
+    }
+    state.storage.get_tree(tree_id).await?.ok_or_else(|| {
+        ApiError::not_found("TREE_NOT_FOUND", format!("Tree {tree_id} not found"))
+    })?;
+    Ok(Json(providers_json()))
+}
+
 // POST /api/v1/research-tasks/:task_id/research-queries
 pub async fn create_query_for_task(
     State(state): State<AppState>,

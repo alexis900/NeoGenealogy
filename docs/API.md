@@ -307,11 +307,11 @@ GET    /api/v1/trees/:tree_id/research/summary → {opportunities, tasks, outcom
 
 Ver `docs/RESEARCH_SESSIONS_HISTORY.md`.
 
-## External Research Core — Fase 6.0
+## External Research Core — Fase 6.0 + FamilySearch Provider 6.1
 
 ```
 POST   /api/v1/trees/:tree_id/research-tasks/:task_id/research-queries {provider, query} → 201 {id, tree_id, task_id, provider, query, status:PENDING, latest_execution:null}
-GET    /api/v1/trees/:tree_id/research-queries?task_id=5&provider=mock&status=COMPLETED&limit=20 → Paginated queries con latest_execution {status, result_count}
+GET    /api/v1/trees/:tree_id/research-queries?task_id=5&provider=mock|familysearch&status=COMPLETED&limit=20 → Paginated queries con latest_execution {status, result_count}
 GET    /api/v1/trees/:tree_id/research-queries/:query_id → {id,provider,query,status,latest_execution}
 DELETE /api/v1/trees/:tree_id/research-queries/:query_id → 204 (CASCADE executions/results)
 POST   /api/v1/trees/:tree_id/research-queries/:query_id/run → Execution {id, query_id, status:COMPLETED|FAILED, result_count}
@@ -322,10 +322,12 @@ GET    /api/v1/trees/:tree_id/research-tasks/:task_id/research-queries → alias
 GET    /api/v1/research-tasks/:task_id/research-queries → POST generic (sin tree path)
 GET    /api/v1/research-queries?tree_id=1 → generic list
 GET    /api/v1/research-queries/:query_id → generic
+GET    /api/v1/research-providers → {providers:[{name, display_name, configured, enabled, status, requires_auth}]}
+GET    /api/v1/trees/:tree_id/research-providers → alias tree-scoped
 ```
 
-- `provider` solo `mock` en 6.0 (400 `INVALID_PROVIDER` si otro)
-- `query` no vacía (400 `INVALID_QUERY`)
+- `provider` `mock` | `familysearch` (400 `INVALID_PROVIDER` si otro). `familysearch` registrado siempre; si no configurado, `POST .../run` → `FAILED` con `AUTH_REQUIRED` ("FamilySearch is not configured")
+- `query` no vacía (400 `INVALID_QUERY`); FamilySearch requiere al menos nombre, año solo → `INVALID_QUERY`
 - `POST run` síncrono: crea `Execution RUNNING→COMPLETED|FAILED`, persiste `Results` con `position`; `COMPLETED+0` = búsqueda ok sin resultados, `FAILED` != `NO_EVIDENCE`
 - Re-run: `COMPLETED/FAILED → RUNNING` crea nueva execution, historial preservado
 - `url` solo `http/https` validada; inválida → 400
@@ -333,8 +335,9 @@ GET    /api/v1/research-queries/:query_id → generic
 - Tree isolation: cross-tree → 404
 - `GET /research/summary` → añade `external_research:{queries,executions,successful,failed,pending,results}`
 - No crea `Evidence/Outcome` automáticamente
+- FamilySearch usa `Platform API Tree Person Search` (`/platform/tree/search?q.givenName=&q.surname=&q.birthLikeDate=`), `GET` con `Bearer` + `Accept: application/x-gedcomx-atom+json`, timeout configurable, mapeo de errores 401→AUTH_REQUIRED, 429→RATE_LIMITED, timeout→TIMEOUT, 5xx→PROVIDER_UNAVAILABLE. Empty → `COMPLETED` 0. Ver `docs/FAMILYSEARCH.md` para env vars, auth (`unauthenticated_session` o `NEOGENEALOGY_FAMILYSEARCH_ACCESS_TOKEN`), rate limiting y limitaciones.
 
-Ver `docs/EXTERNAL_RESEARCH_CORE.md`.
+Ver `docs/EXTERNAL_RESEARCH_CORE.md` y `docs/FAMILYSEARCH.md`.
 
 ## Errores
 
