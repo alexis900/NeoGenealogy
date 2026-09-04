@@ -209,6 +209,27 @@ export interface ResearchSessionDetail {
   timeline: ResearchSessionTimelineEvent[];
 }
 
+export type ResearchQueryStatus = "PENDING"|"RUNNING"|"COMPLETED"|"FAILED";
+export interface ResearchQuery {
+  id:number; tree_id:number; task_id:number; provider:string; query:string; status:ResearchQueryStatus;
+  created_at:string; started_at?:string|null; completed_at?:string|null;
+  error_code?:string|null; error_message?:string|null;
+  latest_execution?: ResearchQueryExecution | null;
+}
+export interface ResearchQueryExecution {
+  id:number; query_id:number; status:ResearchQueryStatus;
+  started_at?:string|null; completed_at?:string|null;
+  error_code?:string|null; error_message?:string|null;
+  provider_request_id?:string|null; provider_metadata?: unknown | null;
+  created_at:string; result_count?: number;
+}
+export interface ResearchResult {
+  id:number; execution_id:number; query_id:number; provider:string;
+  external_id?:string|null; title:string; description?:string|null; url?:string|null;
+  record_type?:string|null; date?:string|null; place?:string|null;
+  metadata?: unknown; position:number; created_at:string;
+}
+
 export interface ResearchSummary {
   opportunities:{high:number;medium:number;low:number};
   tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number};
@@ -220,6 +241,7 @@ export interface ResearchSummary {
   research_followups?:{high:number;medium:number;low:number};
   followup_actions?:{open:number;completed:number;skipped:number};
   sessions?:{total:number;active:number;planned:number;completed:number;abandoned:number};
+  external_research?:{queries:number;executions:number;successful:number;failed:number;pending:number;results:number};
   research_activity?:{
     tasks:{open:number;in_progress:number;resolved:number;rejected:number;inconclusive:number;total:number};
     outcomes:{total:number;confirmed:number;false_lead:number;inconclusive:number;new_lead:number;no_evidence:number};

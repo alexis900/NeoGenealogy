@@ -21,6 +21,8 @@ import ResearchPlanning from "./pages/ResearchPlanning";
 import ResearchSessions from "./pages/ResearchSessions";
 import ResearchSessionDetail from "./pages/ResearchSessionDetail";
 import ResearchSessionHistory from "./pages/ResearchSessionHistory";
+import ResearchQueryDetail from "./pages/ResearchQueryDetail";
+import ResearchResultDetail from "./pages/ResearchResultDetail";
 
 export default function App(){
   return <BrowserRouter>
@@ -37,6 +39,8 @@ export default function App(){
         <Route path="/trees/:treeId/research/sessions/:sessionId" element={<ResearchSessionDetail/>} />
         <Route path="/trees/:treeId/research/tasks" element={<ResearchTasks/>} />
         <Route path="/trees/:treeId/research/tasks/:taskId" element={<ResearchTaskDetail/>} />
+        <Route path="/trees/:treeId/research/queries/:queryId" element={<ResearchQueryDetail/>} />
+        <Route path="/trees/:treeId/research/results/:resultId" element={<ResearchResultDetail/>} />
         <Route path="/trees/:treeId/research/history" element={<ResearchHistory/>} />
         <Route path="/trees/:treeId/research/:oppId" element={<OpportunityDetail/>} />
         <Route path="/trees/:treeId/research/opportunities/:oppId" element={<OpportunityDetail/>} />

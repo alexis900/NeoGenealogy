@@ -877,6 +877,7 @@ impl Storage {
         .fetch_one(&self.pool)
         .await
         .unwrap_or(0);
+        let external = self.external_research_summary(tree_id).await.unwrap_or(serde_json::json!({"queries":0,"executions":0,"successful":0,"failed":0,"pending":0,"results":0}));
         Ok(serde_json::json!({
             "opportunities": { "high": opp_high, "medium": opp_medium, "low": opp_low },
             "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive },
@@ -888,6 +889,7 @@ impl Storage {
             "research_followups": { "high": cnt_fu_high, "medium": cnt_fu_medium, "low": cnt_fu_low },
             "followup_actions": { "open": fa_open, "completed": fa_completed, "skipped": fa_skipped },
             "sessions": { "total": sess_total, "active": sess_active, "planned": sess_planned, "completed": sess_completed, "abandoned": sess_abandoned },
+            "external_research": external,
             "research_activity": {
                 "tasks": { "open": task_open, "in_progress": task_in_progress, "resolved": task_resolved, "rejected": task_rejected, "inconclusive": task_inconclusive, "total": task_open + task_in_progress + task_resolved + task_rejected + task_inconclusive },
                 "outcomes": { "total": outcomes_total, "confirmed": out_confirmed, "false_lead": out_false, "inconclusive": out_incon, "new_lead": out_newlead, "no_evidence": out_noev },
@@ -3288,5 +3290,583 @@ impl Storage {
         q = q.bind(limit).bind(offset);
         let rows = q.fetch_all(&self.pool).await?;
         Ok((rows, total))
+    }
+
+    // -----------------------------------------------------------------------
+    // External Research: Queries / Executions / Results
+    // -----------------------------------------------------------------------
+    pub async fn create_research_query(
+        &self,
+        tree_id: i64,
+        task_id: i64,
+        provider: &str,
+        query: &str,
+    ) -> Result<ResearchQueryRow, StorageError> {
+        if query.trim().is_empty() {
+            return Err(StorageError::Import("query must not be empty".into()));
+        }
+        if provider.trim().is_empty() {
+            return Err(StorageError::Import("provider must not be empty".into()));
+        }
+        // Validate task belongs to tree
+        let task = self
+            .get_research_task(task_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("task {task_id} not found")))?;
+        if task.tree_id != tree_id {
+            return Err(StorageError::NotFound(format!(
+                "task {task_id} not in tree {tree_id}"
+            )));
+        }
+        let provider_norm = provider.trim().to_lowercase();
+        let now = crate::models::now_iso();
+        let res = sqlx::query(
+            "INSERT INTO research_queries (tree_id, task_id, provider, query, status, created_at, started_at, completed_at, error_code, error_message) VALUES (?1,?2,?3,?4,'PENDING',?5,NULL,NULL,NULL,NULL)",
+        )
+        .bind(tree_id)
+        .bind(task_id)
+        .bind(&provider_norm)
+        .bind(query.trim())
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row =
+            sqlx::query_as::<_, ResearchQueryRow>("SELECT * FROM research_queries WHERE id=?1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_query(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchQueryRow>, StorageError> {
+        let row =
+            sqlx::query_as::<_, ResearchQueryRow>("SELECT * FROM research_queries WHERE id=?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn list_research_queries(
+        &self,
+        tree_id: i64,
+        task_id: Option<i64>,
+        provider: Option<&str>,
+        status: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchQueryRow>, i64), StorageError> {
+        let mut sql = "SELECT * FROM research_queries WHERE tree_id = ?".to_string();
+        let mut count_sql = "SELECT COUNT(*) FROM research_queries WHERE tree_id = ?".to_string();
+        if task_id.is_some() {
+            sql.push_str(" AND task_id = ?");
+            count_sql.push_str(" AND task_id = ?");
+        }
+        if provider.is_some() {
+            sql.push_str(" AND provider = ?");
+            count_sql.push_str(" AND provider = ?");
+        }
+        if status.is_some() {
+            sql.push_str(" AND status = ?");
+            count_sql.push_str(" AND status = ?");
+        }
+        sql.push_str(" ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?");
+        let mut cq = sqlx::query_scalar::<_, i64>(&count_sql).bind(tree_id);
+        let mut q = sqlx::query_as::<_, ResearchQueryRow>(&sql).bind(tree_id);
+        if let Some(tid) = task_id {
+            cq = cq.bind(tid);
+            q = q.bind(tid);
+        }
+        if let Some(p) = provider {
+            cq = cq.bind(p.to_lowercase());
+            q = q.bind(p.to_lowercase());
+        }
+        if let Some(s) = status {
+            cq = cq.bind(s);
+            q = q.bind(s);
+        }
+        let total = cq.fetch_one(&self.pool).await?;
+        q = q.bind(limit).bind(offset);
+        let rows = q.fetch_all(&self.pool).await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_queries_for_tasks_batch(
+        &self,
+        task_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, Vec<ResearchQueryRow>>, StorageError> {
+        if task_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders = task_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!("SELECT * FROM research_queries WHERE task_id IN ({placeholders}) ORDER BY created_at DESC");
+        let mut q = sqlx::query_as::<_, ResearchQueryRow>(&sql);
+        for id in task_ids {
+            q = q.bind(id);
+        }
+        let rows = q.fetch_all(&self.pool).await?;
+        let mut map: std::collections::HashMap<i64, Vec<ResearchQueryRow>> =
+            std::collections::HashMap::new();
+        for r in rows {
+            map.entry(r.task_id).or_default().push(r);
+        }
+        Ok(map)
+    }
+
+    pub async fn delete_research_query(&self, id: i64) -> Result<(), StorageError> {
+        sqlx::query("DELETE FROM research_queries WHERE id=?1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    // Execution
+    pub async fn create_execution(
+        &self,
+        query_id: i64,
+    ) -> Result<ResearchQueryExecutionRow, StorageError> {
+        let query = self
+            .get_research_query(query_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("query {query_id} not found")))?;
+        let now = crate::models::now_iso();
+        // Update query status to RUNNING
+        sqlx::query(
+            "UPDATE research_queries SET status='RUNNING', started_at=COALESCE(started_at, ?1) WHERE id=?2",
+        )
+        .bind(&now)
+        .bind(query_id)
+        .execute(&self.pool)
+        .await?;
+        let res = sqlx::query(
+            "INSERT INTO research_query_executions (query_id, status, started_at, completed_at, error_code, error_message, provider_request_id, provider_metadata, created_at) VALUES (?1,'RUNNING',?2,NULL,NULL,NULL,NULL,NULL,?3)",
+        )
+        .bind(query_id)
+        .bind(&now)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        // Ensure query status reflects latest execution (already RUNNING)
+        let _ = query;
+        let row = sqlx::query_as::<_, ResearchQueryExecutionRow>(
+            "SELECT * FROM research_query_executions WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_execution(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchQueryExecutionRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchQueryExecutionRow>(
+            "SELECT * FROM research_query_executions WHERE id=?1",
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn list_executions_for_query(
+        &self,
+        query_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchQueryExecutionRow>, i64), StorageError> {
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_query_executions WHERE query_id=?1")
+                .bind(query_id)
+                .fetch_one(&self.pool)
+                .await?;
+        let rows = sqlx::query_as::<_, ResearchQueryExecutionRow>(
+            "SELECT * FROM research_query_executions WHERE query_id=?1 ORDER BY created_at DESC, id DESC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(query_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn get_latest_execution_for_query(
+        &self,
+        query_id: i64,
+    ) -> Result<Option<ResearchQueryExecutionRow>, StorageError> {
+        let row = sqlx::query_as::<_, ResearchQueryExecutionRow>(
+            "SELECT * FROM research_query_executions WHERE query_id=?1 ORDER BY created_at DESC, id DESC LIMIT 1",
+        )
+        .bind(query_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    pub async fn get_latest_executions_for_queries(
+        &self,
+        query_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, ResearchQueryExecutionRow>, StorageError> {
+        if query_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        // Use batch query: fetch all executions for these queries ordered DESC, then pick first per query
+        let placeholders = query_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT * FROM research_query_executions WHERE query_id IN ({placeholders}) ORDER BY query_id, created_at DESC, id DESC"
+        );
+        let mut q = sqlx::query_as::<_, ResearchQueryExecutionRow>(&sql);
+        for id in query_ids {
+            q = q.bind(id);
+        }
+        let rows = q.fetch_all(&self.pool).await?;
+        let mut map: std::collections::HashMap<i64, ResearchQueryExecutionRow> =
+            std::collections::HashMap::new();
+        for r in rows {
+            map.entry(r.query_id).or_insert(r);
+        }
+        Ok(map)
+    }
+
+    pub async fn update_execution_status(
+        &self,
+        execution_id: i64,
+        status: &str,
+        error_code: Option<&str>,
+        error_message: Option<&str>,
+        provider_request_id: Option<&str>,
+        provider_metadata: Option<&str>,
+    ) -> Result<ResearchQueryExecutionRow, StorageError> {
+        let existing = self
+            .get_execution(execution_id)
+            .await?
+            .ok_or_else(|| StorageError::NotFound(format!("execution {execution_id} not found")))?;
+        let valid = ["PENDING", "RUNNING", "COMPLETED", "FAILED"];
+        if !valid.contains(&status) {
+            return Err(StorageError::Import(format!("invalid status {status}")));
+        }
+        let now = crate::models::now_iso();
+        let completed_at = if status == "COMPLETED" || status == "FAILED" {
+            Some(now.clone())
+        } else {
+            existing.completed_at.clone()
+        };
+        sqlx::query(
+            "UPDATE research_query_executions SET status=?1, completed_at=?2, error_code=?3, error_message=?4, provider_request_id=COALESCE(?5, provider_request_id), provider_metadata=COALESCE(?6, provider_metadata) WHERE id=?7",
+        )
+        .bind(status)
+        .bind(&completed_at)
+        .bind(error_code)
+        .bind(error_message)
+        .bind(provider_request_id)
+        .bind(provider_metadata)
+        .bind(execution_id)
+        .execute(&self.pool)
+        .await?;
+        // Update parent query status to reflect latest execution
+        let query_id = existing.query_id;
+        sqlx::query(
+            "UPDATE research_queries SET status=?1, completed_at=?2, error_code=?3, error_message=?4, started_at=COALESCE(started_at, ?5) WHERE id=?6"
+        )
+        .bind(status)
+        .bind(&completed_at)
+        .bind(error_code)
+        .bind(error_message)
+        .bind(existing.started_at.clone().unwrap_or(now.clone()))
+        .bind(query_id)
+        .execute(&self.pool)
+        .await?;
+        let row = self.get_execution(execution_id).await?.unwrap();
+        Ok(row)
+    }
+
+    // Results
+    pub async fn create_research_result(
+        &self,
+        execution_id: i64,
+        query_id: i64,
+        provider: &str,
+        candidate: &crate::external_research::ResearchResultCandidate,
+        position: i64,
+    ) -> Result<ResearchResultRow, StorageError> {
+        if let Some(url) = &candidate.url {
+            if !crate::external_research::is_valid_external_url(url) {
+                return Err(StorageError::Import(format!("invalid url {url}")));
+            }
+        }
+        let now = crate::models::now_iso();
+        let metadata_str =
+            serde_json::to_string(&candidate.metadata).unwrap_or_else(|_| "{}".to_string());
+        let res = sqlx::query(
+            "INSERT INTO research_results (execution_id, query_id, provider, external_id, title, description, url, record_type, date, place, metadata, position, created_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+        )
+        .bind(execution_id)
+        .bind(query_id)
+        .bind(provider)
+        .bind(&candidate.external_id)
+        .bind(&candidate.title)
+        .bind(&candidate.description)
+        .bind(&candidate.url)
+        .bind(&candidate.record_type)
+        .bind(&candidate.date)
+        .bind(&candidate.place)
+        .bind(&metadata_str)
+        .bind(position)
+        .bind(&now)
+        .execute(&self.pool)
+        .await?;
+        let id = res.last_insert_rowid();
+        let row =
+            sqlx::query_as::<_, ResearchResultRow>("SELECT * FROM research_results WHERE id=?1")
+                .bind(id)
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_research_result(
+        &self,
+        id: i64,
+    ) -> Result<Option<ResearchResultRow>, StorageError> {
+        let row =
+            sqlx::query_as::<_, ResearchResultRow>("SELECT * FROM research_results WHERE id=?1")
+                .bind(id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn list_results_for_execution(
+        &self,
+        execution_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchResultRow>, i64), StorageError> {
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_results WHERE execution_id=?1")
+                .bind(execution_id)
+                .fetch_one(&self.pool)
+                .await?;
+        let rows = sqlx::query_as::<_, ResearchResultRow>(
+            "SELECT * FROM research_results WHERE execution_id=?1 ORDER BY position ASC, id ASC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(execution_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_results_for_query(
+        &self,
+        query_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchResultRow>, i64), StorageError> {
+        // Results for latest execution if no execution specified? But spec says query_id/results = latest execution results
+        // We implement as all results for query ordered by execution then position
+        let total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_results WHERE query_id=?1")
+                .bind(query_id)
+                .fetch_one(&self.pool)
+                .await?;
+        // Order by execution created_at DESC, then position
+        let rows = sqlx::query_as::<_, ResearchResultRow>(
+            "SELECT r.* FROM research_results r JOIN research_query_executions e ON r.execution_id = e.id WHERE r.query_id=?1 ORDER BY e.created_at DESC, r.position ASC LIMIT ?2 OFFSET ?3",
+        )
+        .bind(query_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok((rows, total))
+    }
+
+    pub async fn list_latest_results_for_query(
+        &self,
+        query_id: i64,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<ResearchResultRow>, i64), StorageError> {
+        if let Some(latest) = self.get_latest_execution_for_query(query_id).await? {
+            self.list_results_for_execution(latest.id, limit, offset)
+                .await
+        } else {
+            Ok((vec![], 0))
+        }
+    }
+
+    pub async fn count_results_for_executions(
+        &self,
+        execution_ids: &[i64],
+    ) -> Result<std::collections::HashMap<i64, i64>, StorageError> {
+        if execution_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        let placeholders = execution_ids
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT execution_id, COUNT(*) as cnt FROM research_results WHERE execution_id IN ({placeholders}) GROUP BY execution_id"
+        );
+        let mut q = sqlx::query_as::<_, (i64, i64)>(&sql);
+        for id in execution_ids {
+            q = q.bind(id);
+        }
+        let rows: Vec<(i64, i64)> = q.fetch_all(&self.pool).await?;
+        let mut map: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+        for (eid, cnt) in rows {
+            map.insert(eid, cnt);
+        }
+        for id in execution_ids {
+            map.entry(*id).or_insert(0);
+        }
+        Ok(map)
+    }
+
+    pub async fn get_queries_with_latest_and_counts(
+        &self,
+        tree_id: i64,
+        task_id: Option<i64>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<
+        (
+            Vec<(ResearchQueryRow, Option<ResearchQueryExecutionRow>, i64)>,
+            i64,
+        ),
+        StorageError,
+    > {
+        let (queries, total) = self
+            .list_research_queries(tree_id, task_id, None, None, limit, offset)
+            .await?;
+        if queries.is_empty() {
+            return Ok((vec![], total));
+        }
+        let qids: Vec<i64> = queries.iter().map(|q| q.id).collect();
+        let latest_map = self.get_latest_executions_for_queries(&qids).await?;
+        let exec_ids: Vec<i64> = latest_map.values().map(|e| e.id).collect();
+        let counts = self.count_results_for_executions(&exec_ids).await?;
+        let mut result = Vec::new();
+        for q in queries {
+            let latest = latest_map.get(&q.id).cloned();
+            let cnt = if let Some(exec) = &latest {
+                *counts.get(&exec.id).unwrap_or(&0)
+            } else {
+                0
+            };
+            result.push((q, latest, cnt));
+        }
+        Ok((result, total))
+    }
+
+    pub async fn external_research_summary(
+        &self,
+        tree_id: i64,
+    ) -> Result<serde_json::Value, StorageError> {
+        let queries_total: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_queries WHERE tree_id=?1")
+                .bind(tree_id)
+                .fetch_one(&self.pool)
+                .await?;
+        // Counts by latest execution status – need to aggregate per query latest
+        // Use subquery to get latest execution per query
+        let successful: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_queries rq WHERE rq.tree_id=?1 AND rq.status='COMPLETED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let failed: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_queries rq WHERE rq.tree_id=?1 AND rq.status='FAILED'",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let pending: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_queries rq WHERE rq.tree_id=?1 AND rq.status IN ('PENDING','RUNNING')",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let results_total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_results r JOIN research_queries q ON r.query_id = q.id WHERE q.tree_id=?1",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        // Executions total
+        let executions_total: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_query_executions e JOIN research_queries q ON e.query_id = q.id WHERE q.tree_id=?1",
+        )
+        .bind(tree_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        Ok(serde_json::json!({
+            "queries": queries_total,
+            "executions": executions_total,
+            "successful": successful,
+            "failed": failed,
+            "pending": pending,
+            "results": results_total
+        }))
+    }
+
+    pub async fn get_task_external_summary(
+        &self,
+        task_id: i64,
+    ) -> Result<serde_json::Value, StorageError> {
+        let queries: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM research_queries WHERE task_id=?1")
+                .bind(task_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0);
+        let results: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_results WHERE query_id IN (SELECT id FROM research_queries WHERE task_id=?1)",
+        )
+        .bind(task_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        Ok(serde_json::json!({"queries": queries, "results": results}))
+    }
+
+    pub async fn get_session_external_stats(
+        &self,
+        session_id: i64,
+    ) -> Result<serde_json::Value, StorageError> {
+        // aggregate queries/results for tasks in session
+        let queries: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_queries WHERE task_id IN (SELECT id FROM research_tasks WHERE session_id=?1)",
+        )
+        .bind(session_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        let results: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM research_results WHERE query_id IN (SELECT id FROM research_queries WHERE task_id IN (SELECT id FROM research_tasks WHERE session_id=?1))",
+        )
+        .bind(session_id)
+        .fetch_one(&self.pool)
+        .await
+        .unwrap_or(0);
+        Ok(serde_json::json!({"queries": queries, "results": results}))
     }
 }

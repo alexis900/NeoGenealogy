@@ -46,6 +46,14 @@ export default function ResearchTaskDetail(){
   const [sessions,setSessions]=useState<any[]>([]);
   const [selectedSession,setSelectedSession]=useState<string>("");
   const [sessionSaving,setSessionSaving]=useState(false);
+  // External Research
+  const [extQueries,setExtQueries]=useState<any[]>([]);
+  const [extProvider,setExtProvider]=useState("mock");
+  const [extQueryText,setExtQueryText]=useState("");
+  const [extCreating,setExtCreating]=useState(false);
+  const [extRunning,setExtRunning]=useState<{[key:number]:boolean}>({});
+  const [extResults,setExtResults]=useState<{[key:number]:any[]}>({});
+  const [extResultsLoading,setExtResultsLoading]=useState<{[key:number]:boolean}>({});
 
   const load=async()=>{
     setLoading(true); setErr(null);
@@ -79,6 +87,23 @@ export default function ResearchTaskDetail(){
       try{
         const sess=await api.getSessions(tid,{limit:50});
         setSessions(sess.items);
+      }catch{}
+      // Load external research queries
+      try{
+        const qres = await api.getResearchQueriesForTask(tid, id, {limit:50});
+        setExtQueries(qres.items);
+        // auto fill query text from task title if empty
+        if(!extQueryText && t.title){
+          setExtQueryText(`${t.title} baptism 1882 Sant Martí`);
+        }
+        for(const q of qres.items){
+          if(q.latest_execution && q.latest_execution.status==="COMPLETED"){
+            try{
+              const rres = await api.getResearchQueryResults(tid, q.id, {limit:50});
+              setExtResults(prev=>({...prev, [q.id]: rres.items}));
+            }catch{}
+          }
+        }
       }catch{}
       // Load case summary (derived view, never blocks main task)
       try{
@@ -244,6 +269,38 @@ export default function ResearchTaskDetail(){
     }catch(e:any){setErr(e.message)}
   };
 
+  const createExternalQuery=async()=>{
+    if(!extQueryText.trim()) return;
+    setExtCreating(true);
+    try{
+      const q = await api.createResearchQuery(tid, id, {provider: extProvider, query: extQueryText});
+      const qres = await api.getResearchQueriesForTask(tid, id, {limit:50});
+      setExtQueries(qres.items);
+      setExtQueryText(q.query);
+    }catch(e:any){setErr(e.message)} finally{setExtCreating(false)}
+  };
+  const runExternalQuery=async(queryId:number)=>{
+    setExtRunning(prev=>({...prev, [queryId]: true}));
+    try{
+      await api.runResearchQuery(tid, queryId);
+      const qres = await api.getResearchQueriesForTask(tid, id, {limit:50});
+      setExtQueries(qres.items);
+      setExtResultsLoading(prev=>({...prev, [queryId]: true}));
+      try{
+        const rres = await api.getResearchQueryResults(tid, queryId, {limit:50});
+        setExtResults(prev=>({...prev, [queryId]: rres.items}));
+      }catch{}
+      setExtResultsLoading(prev=>({...prev, [queryId]: false}));
+    }catch(e:any){setErr(e.message)} finally{setExtRunning(prev=>({...prev, [queryId]: false}))}
+  };
+  const viewResults=async(queryId:number)=>{
+    setExtResultsLoading(prev=>({...prev, [queryId]: true}));
+    try{
+      const rres = await api.getResearchQueryResults(tid, queryId, {limit:50});
+      setExtResults(prev=>({...prev, [queryId]: rres.items}));
+    }catch(e:any){setErr(e.message)} finally{setExtResultsLoading(prev=>({...prev, [queryId]: false}))}
+  };
+
   if(loading) return <Loading msg="Loading task…" />;
   if(err) return <ErrorState msg={err} />;
   if(!task) return null;
@@ -288,6 +345,61 @@ export default function ResearchTaskDetail(){
         </div>
       )}
     </div>
+    {/* External Research */}
+    <div className="border rounded p-4 bg-white">
+      <h3 className="font-semibold">External Research</h3>
+      <div className="text-xs text-gray-600 mt-1">External Research finds candidates. The researcher decides what constitutes evidence. Results are <strong>not</strong> evidence.</div>
+      <div className="mt-3 space-y-2">
+        <label className="block"><span className="text-sm font-semibold">Provider</span>
+          <select value={extProvider} onChange={e=>setExtProvider(e.target.value)} className="border rounded px-2 py-1 mt-1">
+            <option value="mock">Mock</option>
+          </select>
+        </label>
+        <label className="block"><span className="text-sm font-semibold">Query</span>
+          <input value={extQueryText} onChange={e=>setExtQueryText(e.target.value)} placeholder="Josep García baptism 1882 Sant Martí" className="w-full border rounded px-2 py-1 mt-1" />
+        </label>
+        <button onClick={createExternalQuery} disabled={extCreating || !extQueryText.trim()} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm disabled:opacity-50">{extCreating?"Creating…":"Create Query"}</button>
+        <button onClick={()=>setExtQueryText(`${task.title} baptism 1882 Sant Martí`)} className="ml-2 px-3 py-1 border rounded text-sm">Suggest Query</button>
+      </div>
+      <div className="mt-4 space-y-3">
+        {extQueries.length===0 ? <div className="text-sm text-gray-500">No external queries yet. Create a query to search.</div> :
+          extQueries.map((q:any)=>(
+            <div key={q.id} className="border rounded p-3 bg-gray-50">
+              <div className="flex justify-between items-start gap-2">
+                <div>
+                  <div className="text-sm font-medium">{q.query}</div>
+                  <div className="text-xs text-gray-600">{q.provider.toUpperCase()} · {q.status} {q.latest_execution ? `· ${q.latest_execution.result_count??0} results` : ""}</div>
+                  {q.error_code && <div className="text-xs text-red-600">{q.error_code}: {q.error_message}</div>}
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={()=>runExternalQuery(q.id)} disabled={!!extRunning[q.id]} className="px-2 py-1 bg-emerald-600 text-white rounded text-xs disabled:opacity-50">{extRunning[q.id]?"Running…": q.status==="COMPLETED"||q.status==="FAILED" ? "Run Again" : "Run Research"}</button>
+                  <button onClick={()=>viewResults(q.id)} className="px-2 py-1 border rounded text-xs bg-white">View Results</button>
+                  <Link to={`/trees/${tid}/research/queries/${q.id}`} className="px-2 py-1 border rounded text-xs bg-white">Detail</Link>
+                </div>
+              </div>
+              {extResults[q.id] && (
+                <div className="mt-3 space-y-2">
+                  <div className="text-xs font-semibold">Results ({extResults[q.id].length})</div>
+                  {extResults[q.id].length===0 ? <div className="text-xs text-gray-500">No results — search completed successfully but nothing found.</div> :
+                    extResults[q.id].map((r:any)=>(
+                      <div key={r.id} className="border rounded p-3 bg-white">
+                        <div className="text-sm font-semibold">{r.title}</div>
+                        {r.description && <div className="text-xs text-gray-600 mt-1">{r.description}</div>}
+                        <div className="text-xs text-gray-500 mt-1">{r.date || ""} {r.place ? `· ${r.place}` : ""} {r.record_type ? `· ${r.record_type}` : ""} · {r.provider.toUpperCase()}</div>
+                        <div className="text-xs mt-1"><span className="px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded">External Research Result</span> <span className="ml-2 text-amber-800">This result is not evidence.</span></div>
+                        <div className="text-xs mt-1">Possible matching record</div>
+                        {r.url && <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline mt-1 inline-block">Open external source</a>}
+                        <Link to={`/trees/${tid}/research/results/${r.id}`} className="ml-2 text-xs text-blue-600 underline">Review Result</Link>
+                      </div>
+                    ))}
+                </div>
+              )}
+              {extResultsLoading[q.id] && <div className="text-xs text-gray-600 mt-2">Loading results…</div>}
+            </div>
+          ))}
+      </div>
+    </div>
+
     <div className="grid gap-4 border rounded p-4 bg-white">
       <div className="text-xs font-semibold text-gray-500">Research Task — What you decided to investigate</div>
       <label className="block"><span className="text-sm font-semibold">Title</span><input value={editTitle} onChange={e=>setEditTitle(e.target.value)} className="w-full border rounded px-2 py-1 mt-1" /></label>

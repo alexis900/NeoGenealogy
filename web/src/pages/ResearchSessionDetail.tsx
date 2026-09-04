@@ -4,6 +4,34 @@ import { api } from "../api/client";
 import { Loading, ErrorState } from "../components/common";
 import { TaskStatusBadge } from "../components/Badges";
 
+function ExternalResearchSessionBlock({treeId, tasks}:{treeId:number; tasks:any[]}){
+  const [external,setExternal]=useState<{queries:number;results:number}|null>(null);
+  useEffect(()=>{
+    let cancelled=false;
+    const load=async()=>{
+      let q=0; let r=0;
+      for(const t of tasks){
+        try{
+          const res=await api.getResearchQueriesForTask(treeId,t.id,{limit:100});
+          q+=res.items.length;
+          for(const qq of res.items){
+            if(qq.latest_execution && qq.latest_execution.result_count) r+=qq.latest_execution.result_count;
+          }
+        }catch{}
+      }
+      if(!cancelled) setExternal({queries:q, results:r});
+    };
+    load();
+    return ()=>{cancelled=true};
+  },[treeId, tasks]);
+  if(!external) return <div className="border rounded p-4 bg-white"><h3 className="font-semibold">External Research</h3><div className="text-sm text-gray-600 mt-1">Loading external research…</div></div>;
+  return <div className="border rounded p-4 bg-white">
+    <h3 className="font-semibold">External Research</h3>
+    <div className="text-sm mt-1">Queries: <strong>{external.queries}</strong> · Results: <strong>{external.results}</strong></div>
+    <div className="text-xs text-gray-600 mt-1">Results are candidates, not evidence.</div>
+  </div>;
+}
+
 function statusClass(s:string){
   if(s==="ACTIVE") return "bg-emerald-600 text-white";
   if(s==="PLANNED") return "bg-blue-600 text-white";
@@ -123,7 +151,12 @@ export default function ResearchSessionDetail(){
       </div>
     )}
 
-    {/* Research Activity - links */}
+     {/* External Research for session - derived */}
+    {tasks.length>0 && (
+      <ExternalResearchSessionBlock treeId={tid} tasks={tasks} />
+    )}
+
+     {/* Research Activity - links */}
     {stats && (
       <div className="border rounded p-4 bg-white">
         <h3 className="font-semibold">Research Activity</h3>

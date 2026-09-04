@@ -1,4 +1,6 @@
-# NeoGenealogy v0.5.3 — Research Sessions History & Statistics
+# NeoGenealogy v0.6.0 — External Research Core
+
+Herramienta local de análisis genealógico. Release v0.6.0 añade **External Research Core** (Phase 6.0): `Research Query → Execution → Mock Provider → Results (candidatos, nunca Evidence)`, `Paginación`, `Re-runs con historial`, `Tree isolation`, `URL http/https` validada. 0.5.3 aportó Sessions History & Stats; 5.2 Sessions, etc.
 
 Herramienta local de análisis genealógico. Release v0.5.3 añade **Research Sessions History & Statistics** (100% derivado, sin persistencia): `/research/sessions/history` con filtros `status/person_id` y stats batch (`tasks/outcomes/evidence/followups`), `Session Detail` con `Session Summary` + `Research Activity` + `timeline` derivada 20 DESC, `Overview` con bloque `Research Activity` y `GET /research/summary` ampliado con `sessions` + `research_activity`. 0.5.2 aportó Sessions `PLANNED/ACTIVE/COMPLETED/ABANDONED` (`Opportunity → Planning → Session → Task(s) → Outcome`); 5.1 Planning UI `What should I research next?`, 5.0 motor determinista.
 
@@ -54,10 +56,10 @@ El importador mantiene etiquetas no reconocidas en `Person.raw`/`Family.raw` →
 - `gedcom` — parser conservador
 - `analyzer` — reglas (cronología, ciclos, duplicados, gaps)
 - `scoring` — Research Score 0–100 explicable
- - `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Sessions` (006, `PLANNED/ACTIVE/COMPLETED/ABANDONED`, `session_id`) + `Research Case Summary` / `Planning` / `Session History & Stats` (todo derivado, sin nuevas tablas, `GROUP BY` batch)
- - `api` — Axum REST `/api/v1` (paginación, filtros, Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Sessions, Session History, Case Summary, Planning, Research Summary con `sessions`+`research_activity`, OpenAPI)
+ - `storage` — SQLite, WAL, `analysis_runs` + `research_tasks` + `research_outcomes` (003) + `research_sources`/`research_citations`/`evidence`/`outcome_evidence` (004) + `research_followup_actions` (005) + `Research Sessions` (006) + `External Research` (007, `research_queries` + `research_query_executions` + `research_results`, mock provider, batch sin N+1) + `Research Case Summary` / `Planning` / `Session History & Stats` (todo derivado)
+ - `api` — Axum REST `/api/v1` (paginación, filtros, Tasks/Outcomes, Sources/Citations/Evidence, Follow-ups/Actions, Sessions, Session History, Case Summary, Planning, External Research (queries/executions/results), Research Summary con `external_research`+`sessions`+`research_activity`, OpenAPI)
  - `cli` — `analyze / import / stats / report / serve` (`--db`, `--host`, `--port`)
- - `web/` — React 19 + Vite + Tailwind + React Router (Workspace + Planning + Sessions + Session History + Tasks + Outcome + Evidence + Case Summary)
+ - `web/` — React 19 + Vite + Tailwind + React Router (Workspace + Planning + Sessions + Session History + Tasks + External Research + Outcome + Evidence + Case Summary)
 
  Véase `docs/RESEARCH_SESSIONS_HISTORY.md`, `docs/RESEARCH_PLANNING.md`, `docs/RESEARCH_CASE_SUMMARY.md`, `docs/RESEARCH_FOLLOWUP_ACTIONS.md`, `docs/RESEARCH_FOLLOWUPS.md`, `docs/EVIDENCE_GAPS.md`, `docs/EVIDENCE_ASSESSMENT.md`, `docs/EVIDENCE_SOURCES.md`, `docs/RESEARCH_OUTCOMES.md`, `docs/RESEARCH_WORKFLOW.md`, `docs/API.md`, `docs/STORAGE.md`, `docs/WEB.md`.
 

@@ -82,6 +82,20 @@ export default function ResearchWorkspace(){
       <Link to={`/trees/${id}/research/sessions/history`} className="text-sm text-blue-600 underline mt-2 ml-3 inline-block">View History →</Link>
     </div>
 
+    {/* External Research */}
+    {summary && summary.external_research && (
+      <div className="border rounded p-4 bg-white">
+        <h2 className="font-semibold">External Research</h2>
+        <div className="flex gap-4 text-sm mt-2">
+          <span>Queries <strong>{summary.external_research.queries}</strong></span>
+          <span>Successful <strong>{summary.external_research.successful}</strong></span>
+          <span>Failed <strong>{summary.external_research.failed}</strong></span>
+          <span>Results <strong>{summary.external_research.results}</strong></span>
+        </div>
+        <div className="text-xs text-gray-600 mt-1">External results are candidates, not evidence.</div>
+      </div>
+    )}
+
     {/* Research Activity - Phase 5.3 */}
     {summary && summary.sessions && (
       <div className="border rounded p-4 bg-white">

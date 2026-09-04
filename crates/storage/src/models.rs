@@ -271,6 +271,53 @@ pub struct ResearchSessionRow {
     pub completed_at: Option<String>,
 }
 
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchQueryRow {
+    pub id: i64,
+    pub tree_id: i64,
+    pub task_id: i64,
+    pub provider: String,
+    pub query: String,
+    pub status: String,
+    pub created_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchQueryExecutionRow {
+    pub id: i64,
+    pub query_id: i64,
+    pub status: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+    pub provider_request_id: Option<String>,
+    pub provider_metadata: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct ResearchResultRow {
+    pub id: i64,
+    pub execution_id: i64,
+    pub query_id: i64,
+    pub provider: String,
+    pub external_id: Option<String>,
+    pub title: String,
+    pub description: Option<String>,
+    pub url: Option<String>,
+    pub record_type: Option<String>,
+    pub date: Option<String>,
+    pub place: Option<String>,
+    pub metadata: Option<String>,
+    pub position: i64,
+    pub created_at: String,
+}
+
 // Helper for counts
 #[derive(Debug, sqlx::FromRow)]
 pub struct CountRow {

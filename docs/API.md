@@ -307,6 +307,35 @@ GET    /api/v1/trees/:tree_id/research/summary → {opportunities, tasks, outcom
 
 Ver `docs/RESEARCH_SESSIONS_HISTORY.md`.
 
+## External Research Core — Fase 6.0
+
+```
+POST   /api/v1/trees/:tree_id/research-tasks/:task_id/research-queries {provider, query} → 201 {id, tree_id, task_id, provider, query, status:PENDING, latest_execution:null}
+GET    /api/v1/trees/:tree_id/research-queries?task_id=5&provider=mock&status=COMPLETED&limit=20 → Paginated queries con latest_execution {status, result_count}
+GET    /api/v1/trees/:tree_id/research-queries/:query_id → {id,provider,query,status,latest_execution}
+DELETE /api/v1/trees/:tree_id/research-queries/:query_id → 204 (CASCADE executions/results)
+POST   /api/v1/trees/:tree_id/research-queries/:query_id/run → Execution {id, query_id, status:COMPLETED|FAILED, result_count}
+GET    /api/v1/trees/:tree_id/research-queries/:query_id/executions → Paginated executions con result_count
+GET    /api/v1/trees/:tree_id/research-queries/:query_id/results → Paginated results de última ejecución ordenados por position
+GET    /api/v1/trees/:tree_id/research-results/:result_id → {id,execution_id,query_id,provider,title,description,url,record_type,date,place,metadata,position}
+GET    /api/v1/trees/:tree_id/research-tasks/:task_id/research-queries → alias listado por task
+GET    /api/v1/research-tasks/:task_id/research-queries → POST generic (sin tree path)
+GET    /api/v1/research-queries?tree_id=1 → generic list
+GET    /api/v1/research-queries/:query_id → generic
+```
+
+- `provider` solo `mock` en 6.0 (400 `INVALID_PROVIDER` si otro)
+- `query` no vacía (400 `INVALID_QUERY`)
+- `POST run` síncrono: crea `Execution RUNNING→COMPLETED|FAILED`, persiste `Results` con `position`; `COMPLETED+0` = búsqueda ok sin resultados, `FAILED` != `NO_EVIDENCE`
+- Re-run: `COMPLETED/FAILED → RUNNING` crea nueva execution, historial preservado
+- `url` solo `http/https` validada; inválida → 400
+- `metadata` JSON libre por provider
+- Tree isolation: cross-tree → 404
+- `GET /research/summary` → añade `external_research:{queries,executions,successful,failed,pending,results}`
+- No crea `Evidence/Outcome` automáticamente
+
+Ver `docs/EXTERNAL_RESEARCH_CORE.md`.
+
 ## Errores
 
 ```json

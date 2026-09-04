@@ -1186,6 +1186,7 @@ name = "neogenealogy-storage"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "neogenealogy-analyzer",
  "neogenealogy-core",
@@ -1198,6 +1199,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]

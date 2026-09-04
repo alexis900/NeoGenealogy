@@ -215,4 +215,41 @@ export const api = {
   getSessionTasks: (treeId:number, sessionId:number)=> req<import("./types").Paginated<import("./types").ResearchTask>>(`/api/v1/trees/${treeId}/research-sessions/${sessionId}/tasks`),
   assignTaskToSession: (treeId:number, taskId:number, sessionId:number)=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/session`,{method:"POST", body:JSON.stringify({session_id: sessionId})}),
   removeTaskFromSession: (treeId:number, taskId:number)=> req<import("./types").ResearchTask>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/session`,{method:"DELETE"}),
+  // External Research
+  createResearchQuery: (treeId:number, taskId:number, body:{provider:string; query:string})=> req<import("./types").ResearchQuery>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/research-queries`,{method:"POST", body:JSON.stringify(body)}),
+  getResearchQueriesForTask: (treeId:number, taskId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchQuery>>(`/api/v1/trees/${treeId}/research-tasks/${taskId}/research-queries${s}`);
+  },
+  getResearchQueries: (treeId:number, params?:{task_id?:number;provider?:string;status?:string;limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.task_id!==undefined) q.set("task_id",String(params.task_id));
+    if(params?.provider) q.set("provider",params.provider);
+    if(params?.status) q.set("status",params.status);
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchQuery>>(`/api/v1/trees/${treeId}/research-queries${s}`);
+  },
+  getResearchQuery: (treeId:number, queryId:number)=> req<import("./types").ResearchQuery>(`/api/v1/trees/${treeId}/research-queries/${queryId}`),
+  deleteResearchQuery: (treeId:number, queryId:number)=> req<void>(`/api/v1/trees/${treeId}/research-queries/${queryId}`,{method:"DELETE"}),
+  runResearchQuery: (treeId:number, queryId:number)=> req<import("./types").ResearchQueryExecution>(`/api/v1/trees/${treeId}/research-queries/${queryId}/run`,{method:"POST"}),
+  getResearchQueryExecutions: (treeId:number, queryId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchQueryExecution>>(`/api/v1/trees/${treeId}/research-queries/${queryId}/executions${s}`);
+  },
+  getResearchQueryResults: (treeId:number, queryId:number, params?:{limit?:number;offset?:number})=>{
+    const q=new URLSearchParams();
+    if(params?.limit!==undefined) q.set("limit",String(params.limit));
+    if(params?.offset!==undefined) q.set("offset",String(params.offset));
+    const s=q.toString()?`?${q}`:"";
+    return req<import("./types").Paginated<import("./types").ResearchResult>>(`/api/v1/trees/${treeId}/research-queries/${queryId}/results${s}`);
+  },
+  getResearchResult: (treeId:number, resultId:number)=> req<import("./types").ResearchResult>(`/api/v1/trees/${treeId}/research-results/${resultId}`),
 };

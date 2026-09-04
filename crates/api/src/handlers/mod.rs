@@ -3,6 +3,7 @@ pub mod case_summary;
 pub mod citations;
 pub mod coverage;
 pub mod evidence;
+pub mod external_research;
 pub mod families;
 pub mod findings;
 pub mod followup_actions;
